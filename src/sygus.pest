@@ -7,21 +7,28 @@ WHITESPACE = _{ " " | "\n" | "\r" | "\t" }
 
 literal = _{ decimal | numerical | boolconst | hexconst | binconst | stringconst }
 
-numerical = @{ "0" | ASCII_NONZERO_DIGIT ~ ASCII_DIGIT+ }
+numerical = @{ "0" | ASCII_NONZERO_DIGIT ~ ASCII_DIGIT* }
 decimal = @{ numerical ~ "." ~ ("0"*) ~ numerical }
 boolconst = { "true" | "false" }
 hexconst = @{ "#x" ~ ASCII_HEX_DIGIT+ }
 binconst = @{ "#b" ~ ASCII_BIN_DIGIT+ }
-stringconst = { "TODO" }
+not_quotation = {
+	(QUOTATION_MARK ~  QUOTATION_MARK  ) |
+	!(QUOTATION_MARK)~
+    ANY            
+}
+stringconst = @{ QUOTATION_MARK ~ not_quotation* ~ QUOTATION_MARK  }
+specialChar = { "_" | "+" | "-" | "*" | "&" | "!" | "~" | "<"  | ">"  | "=" | "/" | "%" | "?" | "." | "$" | "^" }
+
 
 // === 2.3 Symbols ===
 
-symbol = { "TODO" }
-keyword = { "TODO" }
+symbol = @{(ASCII_ALPHA | ASCII_DIGIT | specialChar)+}
+keyword = @{ "." ~ symbol }
 
 // === 2.4 Identifiers ===
 
-identifier = { "TODO" }
+identifier = { symbol |  "(" ~ "_" ~ symbol ~ index+ ~ ")" }
 index = { numerical | symbol }
 
 // === 2.5 Attributes ===
@@ -35,10 +42,25 @@ sort = { identifier | "(" ~ identifier ~ sort+ ~ ")" }
 
 // === 2.7 Terms ===
 
-term = { "TODO" }
-bf_term = { "TODO" }
-sorted_var = { "TODO" }
-var_binding = { "TODO" }
+term = { 
+    identifier
+  | literal
+  | "(" ~ identifier ~ term+ ~ ")"
+  | "(" ~ !term ~ attribute+ ~ ")"
+  | "(" ~ "exists" ~ "(" ~ sorted_var+ ~ ")" ~ term ~ ")"
+  | "(" ~ "forall" ~ "(" ~ sorted_var+ ~ ")" ~ term ~")"
+  | "(" ~ "let" ~ "(" ~ var_binding+ ~ ")" ~ term ~ ")"
+   }
+bf_term = { 
+   identifier
+  | literal
+  | "(" ~ identifier ~ bf_term+ ~ ")"
+  | "(" ~ !bf_term  ~  attribute+ ~ ")"
+
+ }
+
+sorted_var = { "(" ~ symbol ~ sort ~ ")"}
+var_binding = { "(" ~ symbol ~ term ~ ")"}
 
 // === 2.8 Features ===
 
@@ -46,12 +68,57 @@ feature = { ":grammars" | ":fwd-decls" | ":recursion" | ":oracles" | ":weights" 
 
 // === 2.9 Commands ===
 
-cmd = { "TODO" }
-oracle_cmd = { "TODO" }
-smt_cmd = { "TODO" }
-sort_decl = { "TODO" }
-dt_decl = { "TODO" }
-dt_cons_decl = { "TODO" }
-grammar_def = { "TODO" }
-grouped_rule_list = { "TODO" }
-gterm = { "TODO" }
+cmd = { 
+    "(" ~ "assume" ~ term ~ ")"
+  |  "(" ~ "check-synth" ~ ")"
+  |  "(" ~  "chc-constraint" ~ "(" ~ sorted_var* ~ ")" ~  term ~ term ~ ")"
+  |  "(" ~ "constraint" ~ term ~ ")"
+  |  "(" ~  "declare-var" ~ symbol ~ sort ~ ")"
+  |  "(" ~  "declare-weight" ~ symbol ~ attribute* ~ ")"
+  |  "(" ~ "inv-constraint" ~ symbol ~ symbol ~ symbol ~ symbol ~ ")"
+  |  "(" ~  "optimize-synth" ~ "(" ~ term* ~ ")" ~ attribute* ~ ")"
+  |  "(" ~  "set-feature" ~ feature ~ boolconst ~ ")"
+  |  "(" ~  "synth-fun" ~ symbol ~ "(" ~ sorted_var* ~ ")" ~ sort ~ grammar_def? ~ ")"
+  | oracle_cmd
+  | smt_cmd
+ }
+oracle_cmd = { 
+     "(" ~ "oracle-assume" ~ "(" ~ sorted_var* ~ ")" ~ "(" ~ sorted_var* ~ ")" ~ term ~ symbol ~ ")"
+  |  "(" ~ "oracle-constraint" ~ "(" ~ sorted_var* ~ ")" ~ "(" ~ sorted_var* ~ ")" ~ term ~ symbol ~ ")"
+  |  "(" ~ "declare-oracle-fun" ~ symbol ~ "(" ~ sort* ~ ")" ~ sort ~ symbol ~ ")"
+  |  "(" ~ "oracle-constraint-io" ~ symbol ~ symbol ~ ")"
+  |  "(" ~ "oracle-constraint-cex" ~ symbol ~ symbol ~ ")"
+  |  "(" ~ "oracle-constraint-membership" ~ symbol ~ symbol ~ ")"
+  |  "(" ~ "oracle-constraint-poswitness" ~ symbol ~ symbol ~ ")"
+  |  "(" ~ "oracle-constraint-negwitness" ~ symbol ~ symbol ~ ")"
+  |  "(" ~ "declare-correctness-oracle" ~ symbol ~ symbol ~ ")"
+  |  "(" ~ "declare-correctness-cex-oracle" ~ symbol ~ symbol ~ ")"
+ }
+smt_cmd = { 
+    "(" ~ "declare-datatype" ~ symbol ~ dt_decl ~ ")"
+  | "(" ~ "declare-datatypes" ~ "(" ~ dt_decl* ~ ")" ~ "(" ~ dt_decl* ~ ")" ~ ")"
+  | "(" ~ "declare-sort" ~ symbol ~ numerical ~ ")"
+  | "(" ~ "define-fun" ~ symbol ~  "(" ~ sorted_var* ~ ")" ~ sort ~ term ~ ")"
+  | "(" ~ "define-sort" ~ symbol ~ sort ~ ")"
+  | "(" ~ "set-info" ~ keyword ~ literal ~ ")"
+  | "(" ~ "set-logic" ~ symbol ~ ")"
+  | "(" ~ "set-option" ~ keyword ~ literal ~ ")"
+ }
+sort_decl = { "(" ~ symbol ~ numerical ~ ")" }
+dt_decl = { "(" ~ dt_cons_decl+ ~ ")" }
+dt_cons_decl = { "(" ~ symbol ~ sorted_var* ~ ")" }
+grammar_def = { "(" ~ sorted_var* ~ ")" ~ "(" ~ grouped_rule_list* ~ ")" }
+grouped_rule_list = { "(" ~ symbol ~ sort ~ "(" ~ gterm+ ~ ")" ~ ")" }
+gterm = { 
+    "(" ~ "Constant" ~ sort ~ ")" 
+  | "(" ~ "Variable" ~ sort ~ ")" 
+  | bf_term
+}
+
+entry = { cmd* }
+
+
+
+
+
+

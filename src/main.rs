@@ -2,6 +2,8 @@ mod parse;
 
 use egg::*;
 use pest::Parser;
+use std::env;
+use std::fs;
 
 use crate::parse::{Rule, SyGuSParser};
 
@@ -21,7 +23,10 @@ fn main() {
     eg.add(BitVector::And([one, one]));
     println!("{:?}", eg);
     // eg.dot().to_svg("egraph.svg").unwrap();
-
-    let p = SyGuSParser::parse(Rule::literal, "10.23").unwrap();
+    let filename  = "./src/test.sl";
+    let contents = fs::read_to_string(filename)
+        .expect("Something went wrong reading the file");
+    //println!("{}", contents);
+    let p = SyGuSParser::parse(Rule::entry, &contents).unwrap();
     dbg!(p);
 }
