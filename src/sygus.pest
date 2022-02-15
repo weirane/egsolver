@@ -1,0 +1,57 @@
+sygus = { cmd* }
+
+COMMENT = _{ ";" ~ (!"\n" ~ ANY)* }
+WHITESPACE = _{ " " | "\n" | "\r" | "\t" }
+
+// === 2.2 Literals ===
+
+literal = _{ decimal | numerical | boolconst | hexconst | binconst | stringconst }
+
+numerical = @{ "0" | ASCII_NONZERO_DIGIT ~ ASCII_DIGIT+ }
+decimal = @{ numerical ~ "." ~ ("0"*) ~ numerical }
+boolconst = { "true" | "false" }
+hexconst = @{ "#x" ~ ASCII_HEX_DIGIT+ }
+binconst = @{ "#b" ~ ASCII_BIN_DIGIT+ }
+stringconst = { "TODO" }
+
+// === 2.3 Symbols ===
+
+symbol = { "TODO" }
+keyword = { "TODO" }
+
+// === 2.4 Identifiers ===
+
+identifier = { "TODO" }
+index = { numerical | symbol }
+
+// === 2.5 Attributes ===
+
+attribute = { keyword ~ attribute_value? }
+attribute_value = { "TODO" }
+
+// === 2.6 Sorts ===
+
+sort = { identifier | "(" ~ identifier ~ sort+ ~ ")" }
+
+// === 2.7 Terms ===
+
+term = { "TODO" }
+bf_term = { "TODO" }
+sorted_var = { "TODO" }
+var_binding = { "TODO" }
+
+// === 2.8 Features ===
+
+feature = { ":grammars" | ":fwd-decls" | ":recursion" | ":oracles" | ":weights" }
+
+// === 2.9 Commands ===
+
+cmd = { "TODO" }
+oracle_cmd = { "TODO" }
+smt_cmd = { "TODO" }
+sort_decl = { "TODO" }
+dt_decl = { "TODO" }
+dt_cons_decl = { "TODO" }
+grammar_def = { "TODO" }
+grouped_rule_list = { "TODO" }
+gterm = { "TODO" }
