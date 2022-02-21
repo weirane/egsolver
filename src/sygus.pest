@@ -34,7 +34,7 @@ index = { numerical | symbol }
 // === 2.5 Attributes ===
 
 attribute = { keyword ~ attribute_value? }
-attribute_value = { "TODO" }
+attribute_value = { symbol+ | sort+ | term+ }
 
 // === 2.6 Sorts ===
 
@@ -69,19 +69,35 @@ feature = { ":grammars" | ":fwd-decls" | ":recursion" | ":oracles" | ":weights" 
 // === 2.9 Commands ===
 
 cmd = { 
-    "(" ~ "assume" ~ term ~ ")"
-  |  "(" ~ "check-synth" ~ ")"
-  |  "(" ~  "chc-constraint" ~ "(" ~ sorted_var* ~ ")" ~  term ~ term ~ ")"
-  |  "(" ~ "constraint" ~ term ~ ")"
-  |  "(" ~  "declare-var" ~ symbol ~ sort ~ ")"
-  |  "(" ~  "declare-weight" ~ symbol ~ attribute* ~ ")"
-  |  "(" ~ "inv-constraint" ~ symbol ~ symbol ~ symbol ~ symbol ~ ")"
-  |  "(" ~  "optimize-synth" ~ "(" ~ term* ~ ")" ~ attribute* ~ ")"
-  |  "(" ~  "set-feature" ~ feature ~ boolconst ~ ")"
-  |  "(" ~  "synth-fun" ~ symbol ~ "(" ~ sorted_var* ~ ")" ~ sort ~ grammar_def? ~ ")"
+    assume
+  |  check_synth
+  |  check_constraint
+  |  constraint
+  |  dec_var
+  |  dec_weight
+  |  inv_constraint
+  |  optimize_synth
+  |  set_feature
+  |  synth_func
   | oracle_cmd
   | smt_cmd
  }
+
+
+// list of Commands
+assume = {"(" ~ "assume" ~ term ~ ")"}
+constraint = {"(" ~ "constraint" ~ term ~ ")"}
+check_synth = { "(" ~ "check-synth" ~ ")" }
+check_constraint = { "(" ~  "chc-constraint" ~ "(" ~ sorted_var* ~ ")" ~  term ~ term ~ ")" }
+dec_var =  { "(" ~  "declare-var" ~ symbol ~ sort ~ ")" }
+dec_weight = { "(" ~  "declare-weight" ~ symbol ~ attribute* ~ ")" }
+inv_constraint = { "(" ~ "inv-constraint" ~ symbol ~ symbol ~ symbol ~ symbol ~ ")" }
+optimize_synth = { "(" ~  "optimize-synth" ~ "(" ~ term* ~ ")" ~ attribute* ~ ")" }
+set_feature = { "(" ~  "set-feature" ~ feature ~ boolconst ~ ")" }
+synth_func = { "(" ~  "synth-fun" ~ symbol ~ "(" ~ sorted_var* ~ ")" ~ sort ~ grammar_def? ~ ")" }
+
+
+
 oracle_cmd = { 
      "(" ~ "oracle-assume" ~ "(" ~ sorted_var* ~ ")" ~ "(" ~ sorted_var* ~ ")" ~ term ~ symbol ~ ")"
   |  "(" ~ "oracle-constraint" ~ "(" ~ sorted_var* ~ ")" ~ "(" ~ sorted_var* ~ ")" ~ term ~ symbol ~ ")"
@@ -107,7 +123,7 @@ smt_cmd = {
 sort_decl = { "(" ~ symbol ~ numerical ~ ")" }
 dt_decl = { "(" ~ dt_cons_decl+ ~ ")" }
 dt_cons_decl = { "(" ~ symbol ~ sorted_var* ~ ")" }
-grammar_def = { "(" ~ sorted_var* ~ ")" ~ "(" ~ grouped_rule_list* ~ ")" }
+grammar_def = {  ("(" ~ sorted_var+ ~ ")")? ~ "(" ~ grouped_rule_list+ ~ ")" }
 grouped_rule_list = { "(" ~ symbol ~ sort ~ "(" ~ gterm+ ~ ")" ~ ")" }
 gterm = { 
     "(" ~ "Constant" ~ sort ~ ")" 
