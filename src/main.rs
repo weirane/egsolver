@@ -1,20 +1,20 @@
 #![allow(dead_code)]
 mod parse;
-use std::rc::Rc;
-// use std::fmt;
 use std::collections::HashMap;
+use std::fmt;
+use std::rc::Rc;
 
 // hardcode SyGuS spec
 // --------------------------------------------
 
 type ValueT = u64;
-type IOMapT = HashMap<ValueT, ValueT>;     // assume one input one output
+type IOMapT = HashMap<ValueT, ValueT>; // assume one input one output
 
 #[derive(Debug, Clone)]
 #[allow(non_camel_case_types)]
 enum OP {
     _lit(ValueT),
-    _var,  // positional arguments
+    _var, // positional arguments
 
     bvnot,
     smol,
@@ -25,9 +25,23 @@ enum OP {
     bvor,
     bvxor,
     bvadd,
-    im
+    im,
 }
-static LITS: &'static [ValueT] = &[0, 1];
+static OPS: &'static [OP] = &[
+    // dunno how to loop enum
+    OP::bvnot,
+    OP::smol,
+    OP::ehad,
+    OP::arba,
+    OP::shesh,
+    OP::bvand,
+    OP::bvor,
+    OP::bvxor,
+    OP::bvadd,
+    OP::im,
+];
+const NEG1: ValueT = u64::MAX;
+static LITS: &'static [ValueT] = &[0, 1, NEG1];
 impl OP {
     pub fn arity(&self) -> i32 {
         match self {
@@ -46,11 +60,11 @@ impl OP {
         }
     }
     // assume environment is just that one input
-    pub fn semantics(&self, a: &Vec<ValueT>, x: ValueT) -> ValueT {
+    pub fn semantics(&self, a: &Vec<ValueT>, x: &ValueT) -> ValueT {
         match self {
-            OP::_lit(v) => *v,     // dereference -> default is move semantics, 
-                                   // but u64 has copy semantics.
-            OP::_var => x,
+            OP::_lit(v) => *v, // dereference -> default is move semantics,
+            // but u64 has copy semantics.
+            OP::_var => *x,
             OP::bvnot => !a[0],
             OP::smol => a[0] << 1,
             OP::ehad => a[0] >> 1,
@@ -59,53 +73,51 @@ impl OP {
             OP::bvand => a[0] & a[1],
             OP::bvor => a[0] | a[1],
             OP::bvxor => a[0] ^ a[1],
-            OP::bvadd => a[0] & a[1],
-            OP::im => if a[0] == 1 as ValueT {a[1]} else {a[2]}
+            OP::bvadd => a[0].wrapping_add(a[1]),
+            OP::im => {
+                if a[0] == 1 as ValueT {
+                    a[1]
+                } else {
+                    a[2]
+                }
+            }
         }
     }
 }
 
 // --------------------------------------------
 
-
 #[derive(Debug)]
 struct GNode {
     operator: OP,
     children: Vec<Rc<GNode>>,
     io: IOMapT,
-    size: i32
+    size: i32,
 }
 
-// impl GNode {
-//     pub fn new(operator: OP, actuals: Vec<Rc<GNode>>) -> Rc<Self> {
-//         let v = semantics(&operator, &actuals);
-//         let s = actuals.iter().map(|u| u.size).sum::<i32>() + 1;
-//         Rc::new(Self {
-//             operator,
-//             actuals,
-//             io: v,
-//             size: s
-//         })
-//     }
-//     pub fn new_lit(lit: ValueT) -> Rc<Self> {
-//         Rc::new(Self {
-//             operator: OP::_lit(lit),
-//             actuals: vec![],
-//             io: lit,
-//             size: 1
-//         })
-//     }
-// }
-
-// impl fmt::Display for GNode {
-//     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-//         match self.operator {
-//             OP::Lit => write!(f, "{}", self.value),
-//             OP::Not => write!(f, "!({})", self.actuals[0]),
-//             OP::And => write!(f, "({})&({})", self.actuals[0], self.actuals[1])
-//         }
-//     }
-// }
+impl fmt::Display for GNode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self.operator {
+            OP::_lit(NEG1) => write!(f, "-1"),
+            OP::_lit(v) => write!(f, "{}", v),
+            OP::_var => write!(f, "x"),
+            OP::bvnot => write!(f, "~({})", self.children[0]),
+            OP::smol => write!(f, "({}) << 1", self.children[0]),
+            OP::ehad => write!(f, "({}) >> 1", self.children[0]),
+            OP::arba => write!(f, "({}) >> 4", self.children[0]),
+            OP::shesh => write!(f, "({}) >> 16", self.children[0]),
+            OP::bvand => write!(f, "({}) & ({})", self.children[0], self.children[1]),
+            OP::bvor => write!(f, "({}) | ({})", self.children[0], self.children[1]),
+            OP::bvxor => write!(f, "({}) ^ ({})", self.children[0], self.children[1]),
+            OP::bvadd => write!(f, "({}) + ({})", self.children[0], self.children[1]),
+            OP::im => write!(
+                f,
+                "if {} == 1 then {} else {}",
+                self.children[0], self.children[1], self.children[2]
+            ),
+        }
+    }
+}
 
 struct BottomUpSynthesizer {
     bank: Vec<Vec<Rc<GNode>>>,
@@ -114,61 +126,93 @@ struct BottomUpSynthesizer {
 }
 
 impl BottomUpSynthesizer {
+    pub fn new(io_spec: IOMapT) -> Self {
+        let inputs = io_spec.keys().cloned().collect();
+        Self {
+            bank: vec![],
+            io_spec,
+            inputs,
+        }
+    }
 
-    pub fn new_node(&mut self, operator: OP, children: Vec<Rc<GNode>>) -> Rc<GNode> {
-        let get_actuals = |x| children.iter().cloned().map(|a| a.io[x]).collect::<Vec<ValueT>>();
-        let io = self.inputs.iter().cloned()
-            .map(|x| (x,  operator.semantics(&get_actuals(&x),x)  )  )
+    fn new_node(&mut self, operator: OP, children: Vec<Rc<GNode>>) -> Rc<GNode> {
+        let get_actuals = |x| {
+            children
+                .iter()
+                .cloned()
+                .map(|a| a.io[x])
+                .collect::<Vec<ValueT>>()
+        };
+        let io = self
+            .inputs
+            .iter()
+            .map(|x| (*x, operator.semantics(&get_actuals(&x), &x)))
             .collect::<IOMapT>();
         let size = children.iter().map(|u| u.size).sum::<i32>() + 1;
         Rc::new(GNode {
             operator,
             children,
             io,
-            size
+            size,
         })
     }
 
-    pub fn new_lit(&mut self, lit: ValueT) -> Rc<GNode> {
+    fn new_lit(&mut self, lit: ValueT) -> Rc<GNode> {
         Rc::new(GNode {
             operator: OP::_lit(lit),
             children: vec![],
             io: self.inputs.iter().cloned().map(|v| (v, lit)).collect(),
-            size: 1
+            size: 1,
         })
     }
 
-    pub fn synthesize(&mut self) -> Rc<GNode> {
-        for s in 0..3 {
-            let mut sbank = Vec::new();
-            if s == 0 {
+    fn is_goal(&self, u: &Rc<GNode>) -> bool {
+        u.io == self.io_spec
+    }
 
+    pub fn synthesize(&mut self, maxs: usize) -> Option<Rc<GNode>> {
+        for s in 0..maxs + 1 {
+            let mut sbank = Vec::new();
+            macro_rules! check_or_push {
+                ($ue:expr) => {
+                    let u = $ue;
+                    if self.is_goal(&u) {
+                        return Some(u);
+                    }
+                    sbank.push(u);
+                };
+            }
+            if s == 0 {
             } else if s == 1 {
                 for lit in LITS {
-                    sbank.push(self.new_lit(*lit)) // copy semantics of u64
+                    check_or_push!(self.new_lit(*lit));
                 }
-                sbank.push(self.new_node(OP::_var, vec![]))
+                check_or_push!(self.new_node(OP::_var, vec![]));
             } else {
-                for op in self.ops.iter().clone() {
-                    for args in self.gen_args(s-1, op.arity()) {
-                        sbank.push(GNode::new(op, args))
+                for op in OPS.iter() {
+                    for args in self.gen_args((s - 1) as i32, op.arity()) {
+                        check_or_push!(self.new_node(op.clone(), args));
                     }
                 }
-
             }
             self.bank.push(sbank);
         }
 
-        // println!("{:?}", &bank[2][1]);
-        // dbg!(bank);
-        todo!()
+        println!("not found within size {}", maxs);
+        // for s in 1..maxs + 1 {
+        //     println!("programs of size {}", s);
+        //     for u in &self.bank[s] {
+        //         println!("{}", u);
+        //     }
+        // }
+        None
     }
 
     // TODO types
     // TODO optimization. memoization
     fn gen_args(&mut self, total: i32, arity: i32) -> Vec<Vec<Rc<GNode>>> {
         if total < arity {
-            return vec![]
+            return vec![];
         }
         let mut ret = vec![];
         if arity == 1 {
@@ -177,7 +221,7 @@ impl BottomUpSynthesizer {
             }
         } else {
             let upper = total - arity + 1;
-            for y in 1..upper+1 { 
+            for y in 1..upper + 1 {
                 for u in self.bank[y as usize].clone() {
                     for mut xs in self.gen_args(total - y, arity - 1) {
                         xs.push(u.clone());
@@ -209,18 +253,21 @@ impl BottomUpSynthesizer {
     //     }
     //     ret
     // }
-
 }
 
 fn main() {
-    // let mut map = HashMap::new();
-    // map.insert("a", 1);
-    // map.insert("b", 2);
-    // map.insert("c", 3);
-    
-    let inputs : Vec<ValueT> = vec![1,2,3];
-    dbg!( inputs.into_iter().map(|v| (v, 0 as u64)).collect::<IOMapT>());
-    // io: self.io_spec.keys().map(|_| lit).collect(),
+    let lowest_erased = |x: u64| x.wrapping_add(NEG1) & x;
+    let lowest_bit = |x: u64| ((!x) + 1) & x;
+    let f = lowest_erased;
+    let io_spec = vec![1, 2, 3, 18, 256]
+        .into_iter()
+        .map(|x: u64| (x, f(x)))
+        .collect::<IOMapT>();
 
-    // let _ = synthesize();
+    println!("{:?}", io_spec);
+    let mut synthesizer = BottomUpSynthesizer::new(io_spec);
+    if let Some(u) = synthesizer.synthesize(6) {
+        println!("{:?}", u);
+        println!("{}", u);
+    }
 }
