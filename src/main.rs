@@ -1,85 +1,141 @@
 #![allow(dead_code)]
 mod parse;
 use std::rc::Rc;
-use std::fmt;
+// use std::fmt;
+use std::collections::HashMap;
 
-#[derive(Debug, Copy, Clone)]
+// hardcode SyGuS spec
+// --------------------------------------------
+
+type ValueT = u64;
+type IOMapT = HashMap<ValueT, ValueT>;     // assume one input one output
+
+#[derive(Debug, Clone)]
+#[allow(non_camel_case_types)]
 enum OP {
-    And,
-    Not,
-    Lit,
-}
+    _lit(ValueT),
+    _var,  // positional arguments
 
+    bvnot,
+    smol,
+    ehad,
+    arba,
+    shesh,
+    bvand,
+    bvor,
+    bvxor,
+    bvadd,
+    im
+}
+static LITS: &'static [ValueT] = &[0, 1];
 impl OP {
-    pub fn arity(self) -> i32 {
+    pub fn arity(&self) -> i32 {
         match self {
-            OP::And => 2,
-            OP::Not => 1,
-            OP::Lit => 0
+            OP::_lit(_) => 0,
+            OP::_var => 0,
+            OP::bvnot => 1,
+            OP::smol => 1,
+            OP::ehad => 1,
+            OP::arba => 1,
+            OP::shesh => 1,
+            OP::bvand => 2,
+            OP::bvor => 2,
+            OP::bvxor => 2,
+            OP::bvadd => 2,
+            OP::im => 3,
+        }
+    }
+    // assume environment is just that one input
+    pub fn semantics(&self, a: &Vec<ValueT>, x: ValueT) -> ValueT {
+        match self {
+            OP::_lit(v) => *v,     // dereference -> default is move semantics, 
+                                   // but u64 has copy semantics.
+            OP::_var => x,
+            OP::bvnot => !a[0],
+            OP::smol => a[0] << 1,
+            OP::ehad => a[0] >> 1,
+            OP::arba => a[0] >> 4,
+            OP::shesh => a[0] >> 16,
+            OP::bvand => a[0] & a[1],
+            OP::bvor => a[0] | a[1],
+            OP::bvxor => a[0] ^ a[1],
+            OP::bvadd => a[0] & a[1],
+            OP::im => if a[0] == 1 as ValueT {a[1]} else {a[2]}
         }
     }
 }
+
+// --------------------------------------------
+
 
 #[derive(Debug)]
 struct GNode {
     operator: OP,
-    actuals: Vec<Rc<GNode>>,
-    value: i32,
+    children: Vec<Rc<GNode>>,
+    io: IOMapT,
     size: i32
 }
 
-impl GNode {
-    pub fn new(operator: OP, actuals: Vec<Rc<GNode>>) -> Rc<Self> {
-        let v = semantics(&operator, &actuals);
-        let s = actuals.iter().map(|u| u.size).sum::<i32>() + 1;
-        Rc::new(Self {
-            operator,
-            actuals,
-            value: v,
-            size: s
-        })
-    }
-    pub fn new_lit(lit: i32) -> Rc<Self> {
-        Rc::new(Self {
-            operator: OP::Lit,
-            actuals: vec![],
-            value: lit,
-            size: 1
-        })
-    }
-}
+// impl GNode {
+//     pub fn new(operator: OP, actuals: Vec<Rc<GNode>>) -> Rc<Self> {
+//         let v = semantics(&operator, &actuals);
+//         let s = actuals.iter().map(|u| u.size).sum::<i32>() + 1;
+//         Rc::new(Self {
+//             operator,
+//             actuals,
+//             io: v,
+//             size: s
+//         })
+//     }
+//     pub fn new_lit(lit: ValueT) -> Rc<Self> {
+//         Rc::new(Self {
+//             operator: OP::_lit(lit),
+//             actuals: vec![],
+//             io: lit,
+//             size: 1
+//         })
+//     }
+// }
 
-impl fmt::Display for GNode {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self.operator {
-            OP::Lit => write!(f, "{}", self.value),
-            OP::Not => write!(f, "!({})", self.actuals[0]),
-            OP::And => write!(f, "({})&({})", self.actuals[0], self.actuals[1])
-        }
-    }
-}
-
-fn semantics(operator: &OP, a: &Vec<Rc<GNode>>) -> i32 {
-    match operator {
-        OP::And => a[0].value & a[1].value,
-        OP::Not => if a[0].value == 0 {1} else {0},
-        OP::Lit => 0     // <-- shouldn't reach here
-    }
-}
-
+// impl fmt::Display for GNode {
+//     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+//         match self.operator {
+//             OP::Lit => write!(f, "{}", self.value),
+//             OP::Not => write!(f, "!({})", self.actuals[0]),
+//             OP::And => write!(f, "({})&({})", self.actuals[0], self.actuals[1])
+//         }
+//     }
+// }
 
 struct BottomUpSynthesizer {
     bank: Vec<Vec<Rc<GNode>>>,
-    ops: Vec<OP>, // allowed operations
+    io_spec: IOMapT,
+    inputs: Vec<ValueT>,
 }
 
 impl BottomUpSynthesizer {
 
-    pub fn new(ops: Vec<OP>) -> Self {
-        Self {
-            bank: vec![],
-            ops
-        }
+    pub fn new_node(&mut self, operator: OP, children: Vec<Rc<GNode>>) -> Rc<GNode> {
+        let get_actuals = |x| children.iter().cloned().map(|a| a.io[x]).collect::<Vec<ValueT>>();
+        let io = self.inputs.iter().cloned()
+            .map(|x| (x,  operator.semantics(&get_actuals(&x),x)  )  )
+            .collect::<IOMapT>();
+        let size = children.iter().map(|u| u.size).sum::<i32>() + 1;
+        Rc::new(GNode {
+            operator,
+            children,
+            io,
+            size
+        })
+    }
+
+    pub fn new_lit(&mut self, lit: ValueT) -> Rc<GNode> {
+        Rc::new(GNode {
+            operator: OP::_lit(lit),
+            children: vec![],
+            io: self.inputs.iter().cloned().map(|v| (v, lit)).collect(),
+            size: 1
+        })
     }
 
     pub fn synthesize(&mut self) -> Rc<GNode> {
@@ -88,11 +144,12 @@ impl BottomUpSynthesizer {
             if s == 0 {
 
             } else if s == 1 {
-                for lit in 0..2 {
-                    sbank.push(GNode::new_lit(lit))
+                for lit in LITS {
+                    sbank.push(self.new_lit(*lit)) // copy semantics of u64
                 }
+                sbank.push(self.new_node(OP::_var, vec![]))
             } else {
-                for op in self.ops.clone() {
+                for op in self.ops.iter().clone() {
                     for args in self.gen_args(s-1, op.arity()) {
                         sbank.push(GNode::new(op, args))
                     }
@@ -155,7 +212,15 @@ impl BottomUpSynthesizer {
 
 }
 
-
 fn main() {
+    // let mut map = HashMap::new();
+    // map.insert("a", 1);
+    // map.insert("b", 2);
+    // map.insert("c", 3);
+    
+    let inputs : Vec<ValueT> = vec![1,2,3];
+    dbg!( inputs.into_iter().map(|v| (v, 0 as u64)).collect::<IOMapT>());
+    // io: self.io_spec.keys().map(|_| lit).collect(),
+
     // let _ = synthesize();
 }
