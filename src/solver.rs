@@ -26,7 +26,7 @@ enum OP {
     im,
 }
 
-static OPS: &'static [OP] = &[
+static OPS: &[OP] = &[
     // dunno how to loop enum
     OP::bvnot,
     OP::smol,
@@ -41,7 +41,7 @@ static OPS: &'static [OP] = &[
 ];
 
 pub const NEG1: ValueT = u64::MAX;
-static LITS: &'static [ValueT] = &[0, 1, NEG1];
+static LITS: &[ValueT] = &[0, 1, NEG1];
 
 impl OP {
     pub fn arity(&self) -> i32 {
@@ -61,7 +61,7 @@ impl OP {
         }
     }
     // assume environment is just that one input
-    pub fn semantics(&self, a: &Vec<ValueT>, x: &ValueT) -> ValueT {
+    pub fn semantics(&self, a: &[ValueT], x: &ValueT) -> ValueT {
         match self {
             OP::_lit(v) => *v,
             OP::_var => *x,
@@ -75,7 +75,7 @@ impl OP {
             OP::bvxor => a[0] ^ a[1],
             OP::bvadd => a[0].wrapping_add(a[1]),
             OP::im => {
-                if a[0] == 1 as ValueT {
+                if a[0] == 1 {
                     a[1]
                 } else {
                     a[2]
@@ -86,7 +86,7 @@ impl OP {
 }
 
 #[derive(Debug)]
-struct GNode {
+pub struct GNode {
     operator: OP,
     children: Vec<Rc<GNode>>,
     io: IOMapT,
@@ -144,7 +144,7 @@ impl BottomUpSynthesizer {
         let io = self
             .inputs
             .iter()
-            .map(|x| (*x, operator.semantics(&get_actuals(&x), &x)))
+            .map(|x| (*x, operator.semantics(&get_actuals(x), x)))
             .collect::<IOMapT>();
         let size = children.iter().map(|u| u.size).sum::<i32>() + 1;
         Rc::new(GNode {
