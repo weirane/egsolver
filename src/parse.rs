@@ -5,7 +5,7 @@ use anyhow::Result;
 use pest::Parser;
 use pest_derive::Parser;
 
-use crate::ValueT;
+use crate::solver::{IOMapT, ValueT};
 
 #[derive(Parser)]
 #[grammar = "./sygus.pest"]
@@ -33,7 +33,7 @@ pub struct Production {
 pub type Sort = String; // TODO: change
 pub type Symbol = String;
 
-pub fn io_example_from_file(filename: impl AsRef<Path>) -> Result<Vec<(ValueT, ValueT)>> {
+pub fn io_example_from_file(filename: impl AsRef<Path>) -> Result<IOMapT> {
     let contents = std::fs::read_to_string(filename)?;
     let pairs = SyGuSParser::parse(Rule::entry, &contents)?;
     pairs
