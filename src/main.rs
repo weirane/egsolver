@@ -1,14 +1,18 @@
-#![allow(dead_code)]
 mod parse;
+
 use std::collections::HashMap;
 use std::fmt;
 use std::rc::Rc;
 
+use anyhow::Result;
+
+use crate::parse::io_example_from_file;
+
 // hardcode SyGuS spec
 // --------------------------------------------
 
-type ValueT = u64;
-type IOMapT = HashMap<ValueT, ValueT>; // assume one input one output
+pub type ValueT = u64;
+pub type IOMapT = HashMap<ValueT, ValueT>; // assume one input one output
 
 #[derive(Debug, Clone)]
 #[allow(non_camel_case_types)]
@@ -40,8 +44,10 @@ static OPS: &'static [OP] = &[
     OP::bvadd,
     OP::im,
 ];
+
 const NEG1: ValueT = u64::MAX;
 static LITS: &'static [ValueT] = &[0, 1, NEG1];
+
 impl OP {
     pub fn arity(&self) -> i32 {
         match self {
@@ -253,9 +259,12 @@ impl BottomUpSynthesizer {
     // }
 }
 
-fn main() {
+fn main() -> Result<()> {
+    let filename = "./bv-tests/test1.sl";
+    let exp = io_example_from_file(filename)?;
+    dbg!(exp);
+
     let lowest_erased = |x: u64| x.wrapping_add(NEG1) & x;
-    let lowest_bit = |x: u64| ((!x) + 1) & x;
     let f = lowest_erased;
     let io_spec = vec![1, 2, 3, 18, 256]
         .into_iter()
@@ -268,4 +277,5 @@ fn main() {
         println!("{:?}", u);
         println!("{}", u);
     }
+    Ok(())
 }
