@@ -5,7 +5,7 @@ use anyhow::Result;
 use pest::Parser;
 use pest_derive::Parser;
 
-use crate::solver::{IOMapT, ValueT};
+use crate::bottomup_solver::{IOMapT, ValueT};
 
 #[derive(Parser)]
 #[grammar = "./sygus.pest"]

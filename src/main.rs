@@ -1,10 +1,10 @@
+mod bottomup_solver;
 mod parse;
-mod solver;
 
 use anyhow::Result;
 
+use crate::bottomup_solver::{BottomUpSynthesizer, IOMapT, NEG1};
 use crate::parse::io_example_from_file;
-use crate::solver::{BottomUpSynthesizer, IOMapT, NEG1};
 
 fn main() -> Result<()> {
     let filename = "./bv-tests/test1.sl";
