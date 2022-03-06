@@ -121,8 +121,8 @@ impl EggSynthesizer {
         self.bank.add(Program::Var(String::from("x")));
         for _ in 0..maxs {
             let ids: Vec<_> = self.bank.classes().map(|c| c.id).collect();
+            // expand nodes with arity 1
             for &c in ids.iter() {
-                // expand nodes with arity 1
                 for f in [
                     Program::Bvnot,
                     Program::Smol,
@@ -144,46 +144,46 @@ impl EggSynthesizer {
                         return Some(nid);
                     }
                 }
-                // expand nodes with arity 2
-                for f in [
-                    Program::Bvand,
-                    Program::Bvor,
-                    Program::Bvxor,
-                    Program::Bvadd,
-                ] {
-                    for &c in ids.iter() {
-                        for &d in ids.iter() {
-                            let newnode = f([c, d]);
-                            let nid = self.bank.add(newnode);
-                            for &c in ids.iter() {
-                                if self.bank[c].data == self.bank[nid].data {
-                                    self.bank.union(c, nid);
-                                    self.bank.rebuild();
-                                    break;
-                                }
+            }
+            // expand nodes with arity 2
+            for f in [
+                Program::Bvand,
+                Program::Bvor,
+                Program::Bvxor,
+                Program::Bvadd,
+            ] {
+                for &c in ids.iter() {
+                    for &d in ids.iter() {
+                        let newnode = f([c, d]);
+                        let nid = self.bank.add(newnode);
+                        for &c in ids.iter() {
+                            if self.bank[c].data == self.bank[nid].data {
+                                self.bank.union(c, nid);
+                                self.bank.rebuild();
+                                break;
                             }
-                            if self.is_goal(nid) {
-                                return Some(nid);
-                            }
+                        }
+                        if self.is_goal(nid) {
+                            return Some(nid);
                         }
                     }
                 }
-                // expand nodes with arity 3
-                for &c in ids.iter() {
-                    for &d in ids.iter() {
-                        for &e in ids.iter() {
-                            let newnode = Program::Im([c, d, e]);
-                            let nid = self.bank.add(newnode);
-                            for &c in ids.iter() {
-                                if self.bank[c].data == self.bank[nid].data {
-                                    self.bank.union(c, nid);
-                                    self.bank.rebuild();
-                                    break;
-                                }
+            }
+            // expand nodes with arity 3
+            for &c in ids.iter() {
+                for &d in ids.iter() {
+                    for &e in ids.iter() {
+                        let newnode = Program::Im([c, d, e]);
+                        let nid = self.bank.add(newnode);
+                        for &c in ids.iter() {
+                            if self.bank[c].data == self.bank[nid].data {
+                                self.bank.union(c, nid);
+                                self.bank.rebuild();
+                                break;
                             }
-                            if self.is_goal(nid) {
-                                return Some(nid);
-                            }
+                        }
+                        if self.is_goal(nid) {
+                            return Some(nid);
                         }
                     }
                 }
