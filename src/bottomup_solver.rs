@@ -41,7 +41,7 @@ static OPS: &[OP] = &[
 ];
 
 pub const NEG1: ValueT = u64::MAX;
-static LITS: &[ValueT] = &[0, 1, NEG1];
+pub const LITS: &[ValueT] = &[0, 1, NEG1];
 
 impl OP {
     pub fn arity(&self) -> i32 {
