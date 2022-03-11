@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use egg::*;
 
@@ -62,7 +62,7 @@ impl ObservEquiv {
 
 impl Analysis<Program> for ObservEquiv {
     // output and min size
-    type Data = (Vec<ValueT>, u32);
+    type Data = (Vec<ValueT>, usize);
 
     fn make(egraph: &EGraph, enode: &Program) -> Self::Data {
         let inputs = &egraph.analysis.inputs;
@@ -113,6 +113,7 @@ impl Analysis<Program> for ObservEquiv {
 
 pub struct EggSynthesizer {
     pub bank: EGraph,
+    sizes: Vec<HashSet<Id>>,
     outputs: Vec<ValueT>,
 }
 
@@ -121,6 +122,7 @@ impl EggSynthesizer {
         let (inputs, outputs): (Vec<_>, Vec<_>) = io_spec.into_iter().unzip();
         Self {
             bank: EGraph::new(ObservEquiv::new(inputs)),
+            sizes: Vec::new(),
             outputs,
         }
     }
@@ -131,24 +133,28 @@ impl EggSynthesizer {
 
     pub fn synthesize(&mut self, maxs: usize) -> Option<Id> {
         // nodes with arity 0
+        self.sizes.push(HashSet::new());
+        self.sizes.push(HashSet::new());
         for &lit in LITS.iter() {
-            self.bank.add(Program::Lit(lit));
+            let id = self.bank.add(Program::Lit(lit));
+            self.sizes[1].insert(id);
         }
-        self.bank.add(Program::Var(String::from("x")));
+        let id = self.bank.add(Program::Var(String::from("x")));
+        self.sizes[1].insert(id);
         // map from outputs to eclass id
-        let mut classmap: HashMap<Vec<u64>, Id> = HashMap::new();
-        for _ in 0..maxs {
-            let ids: Vec<_> = self.bank.classes().map(|c| c.id).collect();
+        let mut classmap: HashMap<Vec<ValueT>, Id> = HashMap::new();
+        for size in 2..maxs {
+            self.sizes.push(HashSet::new());
             // expand nodes with arity 1
-            for &c in ids.iter() {
-                for f in [
-                    Program::Bvnot,
-                    Program::Smol,
-                    Program::Ehad,
-                    Program::Arba,
-                    Program::Shesh,
-                ] {
-                    let newnode = f(c);
+            for f in [
+                Program::Bvnot,
+                Program::Smol,
+                Program::Ehad,
+                Program::Arba,
+                Program::Shesh,
+            ] {
+                for args in self.gen_args(size - 1, 1) {
+                    let newnode = f(args[0]);
                     let nid = self.bank.add(newnode);
                     if let Some(&cid) = classmap.get(&self.bank[nid].data.0) {
                         self.bank.union(nid, cid);
@@ -156,54 +162,85 @@ impl EggSynthesizer {
                     } else {
                         classmap.insert(self.bank[nid].data.0.clone(), nid);
                     }
+                    self.sizes[size].insert(nid);
                     if self.is_goal(nid) {
                         return Some(nid);
                     }
                 }
             }
+            self.canonicalize_sizes();
             // expand nodes with arity 2
-            for f in [
-                Program::Bvand,
-                Program::Bvor,
-                Program::Bvxor,
-                Program::Bvadd,
-            ] {
-                for &c in ids.iter() {
-                    for &d in ids.iter() {
-                        let newnode = f([c, d]);
-                        let nid = self.bank.add(newnode);
-                        if let Some(&cid) = classmap.get(&self.bank[nid].data.0) {
-                            self.bank.union(nid, cid);
-                            self.bank.rebuild();
-                        } else {
-                            classmap.insert(self.bank[nid].data.0.clone(), nid);
-                        }
-                        if self.is_goal(nid) {
-                            return Some(nid);
-                        }
+            for args in self.gen_args(size - 1, 2) {
+                for f in [
+                    Program::Bvand,
+                    Program::Bvor,
+                    Program::Bvxor,
+                    Program::Bvadd,
+                ] {
+                    let newnode = f([args[0], args[1]]);
+                    let nid = self.bank.add(newnode);
+                    if let Some(&cid) = classmap.get(&self.bank[nid].data.0) {
+                        self.bank.union(nid, cid);
+                        self.bank.rebuild();
+                    } else {
+                        classmap.insert(self.bank[nid].data.0.clone(), nid);
+                    }
+                    self.sizes[size].insert(nid);
+                    if self.is_goal(nid) {
+                        return Some(nid);
                     }
                 }
             }
+            self.canonicalize_sizes();
             // expand nodes with arity 3
-            for &c in ids.iter() {
-                for &d in ids.iter() {
-                    for &e in ids.iter() {
-                        let newnode = Program::Im([c, d, e]);
-                        let nid = self.bank.add(newnode);
-                        if let Some(&cid) = classmap.get(&self.bank[nid].data.0) {
-                            self.bank.union(nid, cid);
-                            self.bank.rebuild();
-                        } else {
-                            classmap.insert(self.bank[nid].data.0.clone(), nid);
-                        }
-                        if self.is_goal(nid) {
-                            return Some(nid);
-                        }
-                    }
+            for args in self.gen_args(size - 1, 3) {
+                let newnode = Program::Im([args[0], args[1], args[2]]);
+                let nid = self.bank.add(newnode);
+                if let Some(&cid) = classmap.get(&self.bank[nid].data.0) {
+                    self.bank.union(nid, cid);
+                    self.bank.rebuild();
+                } else {
+                    classmap.insert(self.bank[nid].data.0.clone(), nid);
+                }
+                self.sizes[size].insert(nid);
+                if self.is_goal(nid) {
+                    return Some(nid);
                 }
             }
+            self.canonicalize_sizes();
         }
         println!("not found within iteration {}", maxs);
         None
+    }
+
+    /// Generates args for `arity` number of children whose sizes sum up to `total`
+    fn gen_args(&self, total: usize, arity: usize) -> Vec<Vec<Id>> {
+        if total < arity {
+            return vec![];
+        }
+        if arity == 1 {
+            return self.sizes[1].iter().map(|&id| vec![id]).collect();
+        }
+        let upper = total - arity + 1;
+        let mut res = vec![];
+        for y in 1..=upper {
+            for &u in self.sizes[y].iter() {
+                for mut v in self.gen_args(total - y, arity - 1) {
+                    v.push(u);
+                    res.push(v);
+                }
+            }
+        }
+        res
+    }
+
+    fn canonicalize_sizes(&mut self) {
+        for (size, ids) in self.sizes.iter_mut().enumerate() {
+            *ids = ids
+                .iter()
+                .map(|&id| self.bank.find(id))
+                .filter(|&id| self.bank[id].data.1 == size)
+                .collect();
+        }
     }
 }
