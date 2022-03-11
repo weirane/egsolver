@@ -128,4 +128,4 @@ gterm = {
   | bf_term
 }
 
-entry = { cmd* }
+entry = { WHITESPACE* ~ cmd* }

@@ -122,15 +122,21 @@ pub struct BottomUpSynthesizer {
     bank: Vec<Vec<Rc<GNode>>>,
     inputs: VecT,
     outputs: VecT,
+    children_comb: HashMap<(i32, i32), Vec<Vec<Rc<GNode>>>>,
+    enable_oe: bool,     // observational equivalence pruning
+    enable_mc: bool,     // memorize children-enumeration
 }
 
 impl BottomUpSynthesizer {
-    pub fn new(io_spec: IOMapT) -> Self {
+    pub fn new(io_spec: IOMapT, enable_oe: bool, enable_mc: bool) -> Self {
         let (inputs, outputs): (Vec<_>, Vec<_>) = io_spec.into_iter().unzip();
         Self {
             bank: vec![],
             inputs,
-            outputs
+            outputs,
+            children_comb: HashMap::new(),
+            enable_oe,
+            enable_mc,
         }
     }
 
@@ -169,7 +175,7 @@ impl BottomUpSynthesizer {
         u.outvec == self.outputs
     }
 
-    pub fn synthesize(&mut self, maxs: usize, oe: bool) -> Option<Rc<GNode>> {
+    pub fn synthesize(&mut self, maxs: usize) -> Option<Rc<GNode>> {
         let mut classmap = HashMap::<VecT, Rc<GNode>>::new();
 
         for s in 0..maxs + 1 {
@@ -181,8 +187,8 @@ impl BottomUpSynthesizer {
                     if self.is_goal(&u) {
                         return Some(u);
                     }
-                    if !oe || classmap.get(&u.outvec).is_none() {
-                        if oe {
+                    if !self.enable_oe || classmap.get(&u.outvec).is_none() {
+                        if self.enable_oe {
                             classmap.insert(u.outvec.clone(), u.clone());
                         }
                         sbank.push(u);
@@ -221,6 +227,12 @@ impl BottomUpSynthesizer {
         if total < arity {
             return vec![];
         }
+        if self.enable_mc {
+            if let Some(v) = self.children_comb.get(&(total, arity)) {
+                return v.clone()
+            }
+        }
+
         let mut ret = vec![];
         if arity == 1 {
             for u in &self.bank[total as usize] {
@@ -236,6 +248,9 @@ impl BottomUpSynthesizer {
                     }
                 }
             }
+        }
+        if self.enable_mc {
+            self.children_comb.insert((total, arity), ret.clone());
         }
         ret
     }
