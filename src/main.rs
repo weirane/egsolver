@@ -2,8 +2,8 @@ mod bottomup_solver;
 mod egg_solver;
 mod parse;
 
-use std::time::Instant;
 use std::env;
+use std::time::Instant;
 
 use anyhow::Result;
 
@@ -39,14 +39,20 @@ fn main() -> Result<()> {
     for enable_oe in [true] {
         for enable_mc in [false, true] {
             println!();
-            for _ in [1,2,3] {
+            for _ in [1, 2, 3] {
                 let now = Instant::now();
-                let mut synthesizer = BottomUpSynthesizer::new(io_spec.clone(), enable_oe, enable_mc);
+                let mut synthesizer =
+                    BottomUpSynthesizer::new(io_spec.clone(), enable_oe, enable_mc);
                 println!("-----");
                 if let Some(u) = synthesizer.synthesize(maxsize) {
                     println!("{}", u);
                 }
-                println!("enable_oe = {}, enable_mc = {}, time = {}", enable_oe, enable_mc, now.elapsed().as_millis());
+                println!(
+                    "enable_oe = {}, enable_mc = {}, time = {}ms",
+                    enable_oe,
+                    enable_mc,
+                    now.elapsed().as_millis()
+                );
             }
         }
     }

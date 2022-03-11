@@ -185,6 +185,7 @@ impl BottomUpSynthesizer {
                 ($ue:expr) => {
                     let u = $ue;
                     if self.is_goal(&u) {
+                        println!("found at size = {}", s);
                         return Some(u);
                     }
                     if !self.enable_oe || classmap.get(&u.outvec).is_none() {
@@ -212,17 +213,9 @@ impl BottomUpSynthesizer {
         }
 
         println!("not found within size {}", maxs);
-        // for s in 1..maxs + 1 {
-        //     println!("programs of size {}", s);
-        //     for u in &self.bank[s] {
-        //         println!("{}", u);
-        //     }
-        // }
         None
     }
 
-    // TODO types
-    // TODO optimization. memoization
     fn gen_args(&mut self, total: i32, arity: i32) -> Vec<Vec<Rc<GNode>>> {
         if total < arity {
             return vec![];
