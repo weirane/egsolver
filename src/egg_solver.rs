@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use egg::*;
 
 use crate::bottomup_solver::{IOMapT, ValueT, LITS};
@@ -115,10 +117,13 @@ impl EggSynthesizer {
     }
 
     pub fn synthesize(&mut self, maxs: usize) -> Option<Id> {
+        // nodes with arity 0
         for &lit in LITS.iter() {
             self.bank.add(Program::Lit(lit));
         }
         self.bank.add(Program::Var(String::from("x")));
+        // map from outputs to eclass id
+        let mut classmap = HashMap::new();
         for _ in 0..maxs {
             let ids: Vec<_> = self.bank.classes().map(|c| c.id).collect();
             // expand nodes with arity 1
@@ -132,13 +137,11 @@ impl EggSynthesizer {
                 ] {
                     let newnode = f(c);
                     let nid = self.bank.add(newnode);
-                    // TODO: use hash table Vec<ValueT> -> Id
-                    for &c in ids.iter() {
-                        if self.bank[c].data == self.bank[nid].data {
-                            self.bank.union(c, nid);
-                            self.bank.rebuild();
-                            break;
-                        }
+                    if let Some(&cid) = classmap.get(&self.bank[nid].data) {
+                        self.bank.union(nid, cid);
+                        self.bank.rebuild();
+                    } else {
+                        classmap.insert(self.bank[nid].data.clone(), nid);
                     }
                     if self.is_goal(nid) {
                         return Some(nid);
@@ -156,12 +159,11 @@ impl EggSynthesizer {
                     for &d in ids.iter() {
                         let newnode = f([c, d]);
                         let nid = self.bank.add(newnode);
-                        for &c in ids.iter() {
-                            if self.bank[c].data == self.bank[nid].data {
-                                self.bank.union(c, nid);
-                                self.bank.rebuild();
-                                break;
-                            }
+                        if let Some(&cid) = classmap.get(&self.bank[nid].data) {
+                            self.bank.union(nid, cid);
+                            self.bank.rebuild();
+                        } else {
+                            classmap.insert(self.bank[nid].data.clone(), nid);
                         }
                         if self.is_goal(nid) {
                             return Some(nid);
@@ -175,12 +177,11 @@ impl EggSynthesizer {
                     for &e in ids.iter() {
                         let newnode = Program::Im([c, d, e]);
                         let nid = self.bank.add(newnode);
-                        for &c in ids.iter() {
-                            if self.bank[c].data == self.bank[nid].data {
-                                self.bank.union(c, nid);
-                                self.bank.rebuild();
-                                break;
-                            }
+                        if let Some(&cid) = classmap.get(&self.bank[nid].data) {
+                            self.bank.union(nid, cid);
+                            self.bank.rebuild();
+                        } else {
+                            classmap.insert(self.bank[nid].data.clone(), nid);
                         }
                         if self.is_goal(nid) {
                             return Some(nid);
