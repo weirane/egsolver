@@ -22,13 +22,15 @@ fn main() -> Result<()> {
         .map(|x: u64| (x, f(x)))
         .collect::<IOMapT>();
 
-    println!("{:?}", io_spec);
+    println!("Given io spec\n{:?}", io_spec);
+    println!("\n---Running baseline");
     let mut synthesizer = BottomUpSynthesizer::new(io_spec.clone());
-    if let Some(u) = synthesizer.synthesize(6) {
+    if let Some(u) = synthesizer.synthesize(6, true) {
         println!("{:?}", u);
         println!("{}", u);
     }
 
+    println!("\n--- Running egg");
     let mut egsolver = EggSynthesizer::new(io_spec);
     if let Some(id) = egsolver.synthesize(6) {
         println!("{:?}", id);

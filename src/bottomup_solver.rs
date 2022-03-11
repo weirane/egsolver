@@ -7,6 +7,7 @@ use std::rc::Rc;
 
 pub type ValueT = u64;
 pub type IOMapT = HashMap<ValueT, ValueT>; // assume one input one output
+pub type VecT = Vec<ValueT>;
 
 #[derive(Debug, Clone)]
 #[allow(non_camel_case_types)]
@@ -89,7 +90,7 @@ impl OP {
 pub struct GNode {
     operator: OP,
     children: Vec<Rc<GNode>>,
-    io: IOMapT,
+    outvec: VecT,
     size: i32,
 }
 
@@ -119,38 +120,38 @@ impl fmt::Display for GNode {
 
 pub struct BottomUpSynthesizer {
     bank: Vec<Vec<Rc<GNode>>>,
-    io_spec: IOMapT,
-    inputs: Vec<ValueT>,
+    inputs: VecT,
+    outputs: VecT,
 }
 
 impl BottomUpSynthesizer {
     pub fn new(io_spec: IOMapT) -> Self {
-        let inputs = io_spec.keys().cloned().collect();
+        let (inputs, outputs): (Vec<_>, Vec<_>) = io_spec.into_iter().unzip();
         Self {
             bank: vec![],
-            io_spec,
             inputs,
+            outputs
         }
     }
 
     fn new_node(&mut self, operator: OP, children: Vec<Rc<GNode>>) -> Rc<GNode> {
-        let get_actuals = |x| {
+        let get_actuals = |i| {
             children
                 .iter()
                 .cloned()
-                .map(|a| a.io[x])
-                .collect::<Vec<ValueT>>()
+                .map(|a| a.outvec[i])
+                .collect::<VecT>()
         };
-        let io = self
+        let outvec = self
             .inputs
-            .iter()
-            .map(|x| (*x, operator.semantics(&get_actuals(x), x)))
-            .collect::<IOMapT>();
+            .iter().enumerate()
+            .map(|(i,x)| operator.semantics(&get_actuals(i), x))
+            .collect::<VecT>();
         let size = children.iter().map(|u| u.size).sum::<i32>() + 1;
         Rc::new(GNode {
             operator,
             children,
-            io,
+            outvec,
             size,
         })
     }
@@ -159,26 +160,34 @@ impl BottomUpSynthesizer {
         Rc::new(GNode {
             operator: OP::_lit(lit),
             children: vec![],
-            io: self.inputs.iter().cloned().map(|v| (v, lit)).collect(),
+            outvec: self.inputs.iter().map(|_| lit).collect(),
             size: 1,
         })
     }
 
     fn is_goal(&self, u: &Rc<GNode>) -> bool {
-        u.io == self.io_spec
+        u.outvec == self.outputs
     }
 
-    pub fn synthesize(&mut self, maxs: usize) -> Option<Rc<GNode>> {
+    pub fn synthesize(&mut self, maxs: usize, oe: bool) -> Option<Rc<GNode>> {
+        let mut classmap = HashMap::<VecT, Rc<GNode>>::new();
+
         for s in 0..maxs + 1 {
             let mut sbank = Vec::new();
+            // check for goal / redundancy. if not, add to bank
             macro_rules! check_or_push {
                 ($ue:expr) => {
                     let u = $ue;
                     if self.is_goal(&u) {
                         return Some(u);
                     }
-                    sbank.push(u);
-                };
+                    if !oe || classmap.get(&u.outvec).is_none() {
+                        if oe {
+                            classmap.insert(u.outvec.clone(), u.clone());
+                        }
+                        sbank.push(u);
+                    }
+                }
             }
             if s == 0 {
             } else if s == 1 {
