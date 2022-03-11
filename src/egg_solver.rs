@@ -61,40 +61,53 @@ impl ObservEquiv {
 }
 
 impl Analysis<Program> for ObservEquiv {
-    type Data = Vec<ValueT>;
+    // output and min size
+    type Data = (Vec<ValueT>, u32);
 
     fn make(egraph: &EGraph, enode: &Program) -> Self::Data {
         let inputs = &egraph.analysis.inputs;
-        let x = |i: &Id| &egraph[*i].data;
+        let o = |i: &Id| &egraph[*i].data.0; // output
+        let s = |i: &Id| &egraph[*i].data.1; // minsize
         use Program::*;
         match enode {
-            Bvnot(id) | Smol(id) | Ehad(id) | Arba(id) | Shesh(id) => x(id)
-                .iter()
-                .zip(inputs)
-                .map(|(&arg, inp)| enode.semantics()(&[arg], inp))
-                .collect(),
-            Bvand(ids) | Bvor(ids) | Bvxor(ids) | Bvadd(ids) => x(&ids[0])
-                .iter()
-                .zip(x(&ids[1]).iter())
-                .zip(inputs)
-                .map(|((&arg1, &arg2), inp)| enode.semantics()(&[arg1, arg2], inp))
-                .collect(),
-            Im(ids) => x(&ids[0])
-                .iter()
-                .zip(x(&ids[1]).iter())
-                .zip(x(&ids[2]).iter())
-                .zip(inputs)
-                .map(|(((&arg1, &arg2), &arg3), inp)| enode.semantics()(&[arg1, arg2, arg3], inp))
-                .collect(),
-            Lit(v) => inputs.iter().map(|_| *v).collect(),
-            Var(_) => inputs.clone(),
+            Bvnot(id) | Smol(id) | Ehad(id) | Arba(id) | Shesh(id) => {
+                let outputs = o(id)
+                    .iter()
+                    .zip(inputs)
+                    .map(|(&arg, inp)| enode.semantics()(&[arg], inp))
+                    .collect();
+                (outputs, s(id) + 1)
+            }
+            Bvand(ids) | Bvor(ids) | Bvxor(ids) | Bvadd(ids) => {
+                let outputs = o(&ids[0])
+                    .iter()
+                    .zip(o(&ids[1]).iter())
+                    .zip(inputs)
+                    .map(|((&arg1, &arg2), inp)| enode.semantics()(&[arg1, arg2], inp))
+                    .collect();
+                (outputs, s(&ids[0]) + s(&ids[1]) + 1)
+            }
+            Im(ids) => {
+                let outputs = o(&ids[0])
+                    .iter()
+                    .zip(o(&ids[1]).iter())
+                    .zip(o(&ids[2]).iter())
+                    .zip(inputs)
+                    .map(|(((&arg1, &arg2), &arg3), inp)| {
+                        enode.semantics()(&[arg1, arg2, arg3], inp)
+                    })
+                    .collect();
+                (outputs, s(&ids[0]) + s(&ids[1]) + s(&ids[2]) + 1)
+            }
+            Lit(v) => (inputs.iter().map(|_| *v).collect(), 1),
+            Var(_) => (inputs.clone(), 1),
         }
     }
 
     fn merge(&mut self, a: &mut Self::Data, b: Self::Data) -> DidMerge {
-        assert_eq!(a, &b);
-        // TODO: this may be true
-        DidMerge(false, false)
+        assert_eq!(a.0, b.0);
+        a.1 = a.1.min(b.1);
+        DidMerge(a.1 > b.1, a.1 < b.1)
     }
 }
 
@@ -113,7 +126,7 @@ impl EggSynthesizer {
     }
 
     fn is_goal(&self, prog: Id) -> bool {
-        self.outputs == self.bank[prog].data
+        self.outputs == self.bank[prog].data.0
     }
 
     pub fn synthesize(&mut self, maxs: usize) -> Option<Id> {
@@ -123,7 +136,7 @@ impl EggSynthesizer {
         }
         self.bank.add(Program::Var(String::from("x")));
         // map from outputs to eclass id
-        let mut classmap = HashMap::new();
+        let mut classmap: HashMap<Vec<u64>, Id> = HashMap::new();
         for _ in 0..maxs {
             let ids: Vec<_> = self.bank.classes().map(|c| c.id).collect();
             // expand nodes with arity 1
@@ -137,11 +150,11 @@ impl EggSynthesizer {
                 ] {
                     let newnode = f(c);
                     let nid = self.bank.add(newnode);
-                    if let Some(&cid) = classmap.get(&self.bank[nid].data) {
+                    if let Some(&cid) = classmap.get(&self.bank[nid].data.0) {
                         self.bank.union(nid, cid);
                         self.bank.rebuild();
                     } else {
-                        classmap.insert(self.bank[nid].data.clone(), nid);
+                        classmap.insert(self.bank[nid].data.0.clone(), nid);
                     }
                     if self.is_goal(nid) {
                         return Some(nid);
@@ -159,11 +172,11 @@ impl EggSynthesizer {
                     for &d in ids.iter() {
                         let newnode = f([c, d]);
                         let nid = self.bank.add(newnode);
-                        if let Some(&cid) = classmap.get(&self.bank[nid].data) {
+                        if let Some(&cid) = classmap.get(&self.bank[nid].data.0) {
                             self.bank.union(nid, cid);
                             self.bank.rebuild();
                         } else {
-                            classmap.insert(self.bank[nid].data.clone(), nid);
+                            classmap.insert(self.bank[nid].data.0.clone(), nid);
                         }
                         if self.is_goal(nid) {
                             return Some(nid);
@@ -177,11 +190,11 @@ impl EggSynthesizer {
                     for &e in ids.iter() {
                         let newnode = Program::Im([c, d, e]);
                         let nid = self.bank.add(newnode);
-                        if let Some(&cid) = classmap.get(&self.bank[nid].data) {
+                        if let Some(&cid) = classmap.get(&self.bank[nid].data.0) {
                             self.bank.union(nid, cid);
                             self.bank.rebuild();
                         } else {
-                            classmap.insert(self.bank[nid].data.clone(), nid);
+                            classmap.insert(self.bank[nid].data.0.clone(), nid);
                         }
                         if self.is_goal(nid) {
                             return Some(nid);
