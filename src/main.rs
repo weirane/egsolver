@@ -7,9 +7,7 @@ use std::time::Instant;
 
 use anyhow::Result;
 
-use egg::{AstSize, Extractor};
-
-use crate::bottomup_solver::{BottomUpSynthesizer, IOMapT, NEG1};
+use crate::bottomup_solver::BottomUpSynthesizer;
 use crate::egg_solver::EggSynthesizer;
 use crate::parse::io_example_from_file;
 
@@ -36,34 +34,30 @@ fn main() -> Result<()> {
 
     println!("Given io spec\n{:?}", io_spec);
     println!("\n---Running baseline");
-    for enable_oe in [true] {
-        for enable_mc in [false, true] {
-            println!();
-            for _ in [1, 2, 3] {
-                let now = Instant::now();
-                let mut synthesizer =
-                    BottomUpSynthesizer::new(io_spec.clone(), enable_oe, enable_mc);
-                println!("-----");
-                if let Some(u) = synthesizer.synthesize(maxsize) {
-                    println!("{}", u);
-                }
-                println!(
-                    "enable_oe = {}, enable_mc = {}, time = {}ms",
-                    enable_oe,
-                    enable_mc,
-                    now.elapsed().as_millis()
-                );
+    for enable_oe in [false, true] {
+        for enable_ft in [false, true] {
+            let now = Instant::now();
+            let mut synthesizer = BottomUpSynthesizer::new(io_spec.clone(), enable_oe, enable_ft);
+            println!("-----");
+            if let Some(u) = synthesizer.synthesize(maxsize) {
+                println!("{}", u);
             }
+            println!(
+                "enable_oe = {}, enable_ft = {}, time = {}ms",
+                enable_oe,
+                enable_ft,
+                now.elapsed().as_millis()
+            );
         }
     }
 
     println!("\n--- Running egg");
+    let now = Instant::now();
     let mut egsolver = EggSynthesizer::new(io_spec);
-    if let Some(id) = egsolver.synthesize(maxsize) {
-        println!("{:?}", id);
-        let ext = Extractor::new(&egsolver.bank, AstSize);
-        let (_, ast) = ext.find_best(id);
-        println!("{}", ast.pretty(80).replace("18446744073709551615", "-1"));
+    let res = egsolver.synthesize(maxsize);
+    println!("egg. time = {}ms", now.elapsed().as_millis());
+    if let Some(id) = res {
+        egsolver.print_equivalents(id, 20);
     }
     Ok(())
 }

@@ -9,7 +9,7 @@ pub type ValueT = u64;
 pub type IOMapT = HashMap<ValueT, ValueT>; // assume one input one output
 pub type VecT = Vec<ValueT>;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 #[allow(non_camel_case_types)]
 enum OP {
     _lit(ValueT),
@@ -122,21 +122,19 @@ pub struct BottomUpSynthesizer {
     bank: Vec<Vec<Rc<GNode>>>,
     inputs: VecT,
     outputs: VecT,
-    children_comb: HashMap<(i32, i32), Vec<Vec<Rc<GNode>>>>,
     enable_oe: bool,     // observational equivalence pruning
-    enable_mc: bool,     // memorize children-enumeration
+    enable_ft: bool,
 }
 
 impl BottomUpSynthesizer {
-    pub fn new(io_spec: IOMapT, enable_oe: bool, enable_mc: bool) -> Self {
+    pub fn new(io_spec: IOMapT, enable_oe: bool, enable_ft: bool) -> Self {
         let (inputs, outputs): (Vec<_>, Vec<_>) = io_spec.into_iter().unzip();
         Self {
             bank: vec![],
             inputs,
             outputs,
-            children_comb: HashMap::new(),
             enable_oe,
-            enable_mc,
+            enable_ft,
         }
     }
 
@@ -204,8 +202,8 @@ impl BottomUpSynthesizer {
                 check_or_push!(self.new_node(OP::_var, vec![]));
             } else {
                 for op in OPS.iter() {
-                    for args in self.gen_args((s - 1) as i32, op.arity()) {
-                        check_or_push!(self.new_node(op.clone(), args));
+                    for args in self.gen_args((s - 1) as i32, op.arity(), *op) {
+                        check_or_push!(self.new_node(*op, args));
                     }
                 }
             }
@@ -216,56 +214,53 @@ impl BottomUpSynthesizer {
         None
     }
 
-    fn gen_args(&mut self, total: i32, arity: i32) -> Vec<Vec<Rc<GNode>>> {
+    // generate a list of argument lists, 
+    // given total size, and the number of args
+    //       context operator (for filtering)
+    fn gen_args(&mut self, total: i32, arity: i32, op: OP) -> Vec<Vec<Rc<GNode>>> {
         if total < arity {
             return vec![];
-        }
-        if self.enable_mc {
-            if let Some(v) = self.children_comb.get(&(total, arity)) {
-                return v.clone()
-            }
         }
 
         let mut ret = vec![];
         if arity == 1 {
             for u in &self.bank[total as usize] {
-                ret.push(vec![u.clone()])
+                if !self.enable_ft || !self.filter(op, u) {
+                    ret.push(vec![u.clone()]);
+                }
             }
         } else {
             let upper = total - arity + 1;
             for y in 1..upper + 1 {
                 for u in self.bank[y as usize].clone() {
-                    for mut xs in self.gen_args(total - y, arity - 1) {
+                    for mut xs in self.gen_args(total - y, arity - 1, op) {
                         xs.push(u.clone());
                         ret.push(xs);
                     }
                 }
             }
         }
-        if self.enable_mc {
-            self.children_comb.insert((total, arity), ret.clone());
-        }
         ret
     }
 
-    // fn gen_size(total: i32, arity: i32) -> Vec<Vec<i32>> {
-    //     if total < arity {
-    //         return vec![]
-    //     }
-    //     if total == arity {
-    //         return vec![vec![1; arity as usize]]
-    //     }
-    //     if arity == 1 {
-    //         return vec![vec![total]]
-    //     }
-    //     let mut ret = vec![];
-    //     let upper = total - arity + 1;
-    //     for y in 1..upper+1 {
-    //         for mut xs in BottomUpSynthesizer::gen_size(total - y, arity - 1) {
-    //             xs.push(y);
-    //             ret.push(xs);
-    //         }
-    //     }
-    //     ret
-    // }
+    // returns tree iff can be filtered out
+    // for example (+ 0) can be filtered out
+    fn filter(&self, op: OP, first_arg: &Rc<GNode>) -> bool {
+        use OP::*;
+        match (op, first_arg.operator) {
+            (smol, ehad) => true,
+            (ehad, smol) => true,
+            (bvnot, _lit(0)) => true,
+            (bvnot, _lit(NEG1)) => true,
+            (bvnot, bvnot) => true,
+            (bvand, _lit(NEG1)) => true,
+            (bvand, _lit(0)) => true,
+            (bvor, _lit(NEG1)) => true,
+            (bvor, _lit(0)) => true,
+            (bvxor, _lit(NEG1)) => true,
+            (bvxor, _lit(0)) => true,
+            (bvadd, _lit(0)) => true,
+            _ => false
+        }
+    }
 }

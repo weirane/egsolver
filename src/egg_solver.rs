@@ -193,4 +193,36 @@ impl EggSynthesizer {
         println!("not found within iteration {}", maxs);
         None
     }
+
+    pub fn print_equivalents(&mut self, id: Id, howmany: i32) {
+        for i in 1..=howmany {
+            let ext = Extractor::new(&self.bank, AstSize);
+            let (cost, ast) = ext.find_best(id);
+            println!("[#{} cost={}] {}", i, cost, ast.pretty(80).replace("18446744073709551615", "-1"));
+
+            if self.delete_best(id) == false {
+                println!("cannot find another variant");
+                break
+            }
+        }
+    }
+
+    fn delete_best(&mut self, id: Id) -> bool {
+        let ext = Extractor::new(&self.bank, AstSize);
+        let enode = ext.find_best_node(id).clone();
+        // try to delete stuff in children first
+        for child in enode.children() {
+            if self.delete_best(*child) {
+                return true
+            }
+        }
+        // if not, delete this enode when it is not the only one in the eclass
+        let equivalents = &mut self.bank[id].nodes;
+        if equivalents.len() > 1 {
+            equivalents.retain(|u| u != &enode);
+            true
+        } else {
+            false
+        }
+    }
 }
