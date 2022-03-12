@@ -34,7 +34,7 @@ fn main() -> Result<()> {
 
     println!("Given io spec\n{:?}", io_spec);
     println!("\n---Running baseline");
-    for enable_oe in [false, true] {
+    for enable_oe in [true] {
         for enable_ft in [false, true] {
             let now = Instant::now();
             let mut synthesizer = BottomUpSynthesizer::new(io_spec.clone(), enable_oe, enable_ft);
