@@ -106,8 +106,14 @@ impl Analysis<Program> for ObservEquiv {
 
     fn merge(&mut self, a: &mut Self::Data, b: Self::Data) -> DidMerge {
         assert_eq!(a.0, b.0);
-        a.1 = a.1.min(b.1);
-        DidMerge(a.1 > b.1, a.1 < b.1)
+        if a.1 > b.1 {
+            a.1 = b.1;
+            DidMerge(true, false)
+        } else if a.1 == b.1 {
+            DidMerge(false, false)
+        } else {
+            DidMerge(false, true)
+        }
     }
 }
 
@@ -136,8 +142,9 @@ impl EggSynthesizer {
         // map from outputs to eclass id
         let mut classmap: HashMap<Vec<ValueT>, Id> = HashMap::new();
         macro_rules! process {
-            ($size:expr, $id:expr) => {
-                let nid = $id;
+            ($size:expr, $prog:expr) => {
+                let prog = $prog;
+                let nid = self.bank.add(prog);
                 if let Some(&cid) = classmap.get(&self.bank[nid].data.0) {
                     self.bank.union(nid, cid);
                 } else {
@@ -154,9 +161,9 @@ impl EggSynthesizer {
         // nodes with arity 0
         self.sizes.push(HashSet::new());
         for &lit in LITS.iter() {
-            process!(1, self.bank.add(Lit(lit)));
+            process!(1, Lit(lit));
         }
-        process!(1, self.bank.add(Var(String::from("x"))));
+        process!(1, Var(String::from("x")));
         for size in 2..=maxs {
             self.sizes.push(HashSet::new());
             // expand nodes with arity 1
@@ -164,7 +171,7 @@ impl EggSynthesizer {
             for args in self.gen_args(size - 1, 1) {
                 for f in [Bvnot, Smol, Ehad, Arba, Shesh] {
                     let newnode = f(args[0]);
-                    process!(size, self.bank.add(newnode));
+                    process!(size, newnode);
                 }
             }
             // expand nodes with arity 2
@@ -172,14 +179,14 @@ impl EggSynthesizer {
             for args in self.gen_args(size - 1, 2) {
                 for f in [Bvand, Bvor, Bvxor, Bvadd] {
                     let newnode = f([args[0], args[1]]);
-                    process!(size, self.bank.add(newnode));
+                    process!(size, newnode);
                 }
             }
             // expand nodes with arity 3
             self.canonicalize_sizes();
             for args in self.gen_args(size - 1, 3) {
                 let newnode = Im([args[0], args[1], args[2]]);
-                process!(size, self.bank.add(newnode));
+                process!(size, newnode);
             }
             self.bank.rebuild();
         }
@@ -194,7 +201,7 @@ impl EggSynthesizer {
             return vec![];
         }
         if arity == 1 {
-            return self.sizes[1].iter().map(|&id| vec![id]).collect();
+            return self.sizes[total].iter().map(|&id| vec![id]).collect();
         }
         let upper = total - arity + 1;
         let mut res = vec![];
