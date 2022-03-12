@@ -153,7 +153,7 @@ impl EggSynthesizer {
                 self.sizes[$size].insert(nid);
                 if self.is_goal(nid) {
                     self.bank.rebuild();
-                    return Some(nid);
+                    return Some(self.bank.find(nid));
                 }
             };
         }
@@ -252,6 +252,7 @@ impl EggSynthesizer {
         let equivalents = &mut self.bank[id].nodes;
         if equivalents.len() > 1 {
             equivalents.retain(|u| u != &enode);
+            self.bank.rebuild();
             true
         } else {
             false
