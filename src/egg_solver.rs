@@ -132,6 +132,7 @@ impl EggSynthesizer {
     }
 
     pub fn synthesize(&mut self, maxs: usize) -> Option<Id> {
+        use Program::*;
         // map from outputs to eclass id
         let mut classmap: HashMap<Vec<ValueT>, Id> = HashMap::new();
         macro_rules! process {
@@ -139,64 +140,55 @@ impl EggSynthesizer {
                 let nid = $id;
                 if let Some(&cid) = classmap.get(&self.bank[nid].data.0) {
                     self.bank.union(nid, cid);
-                    self.bank.rebuild();
                 } else {
                     classmap.insert(self.bank[nid].data.0.clone(), nid);
                 }
                 self.sizes[$size].insert(nid);
                 if self.is_goal(nid) {
+                    self.bank.rebuild();
                     return Some(nid);
                 }
             };
         }
+        self.sizes.push(HashSet::new());
         // nodes with arity 0
         self.sizes.push(HashSet::new());
-        self.sizes.push(HashSet::new());
         for &lit in LITS.iter() {
-            process!(1, self.bank.add(Program::Lit(lit)));
+            process!(1, self.bank.add(Lit(lit)));
         }
-        process!(1, self.bank.add(Program::Var(String::from("x"))));
+        process!(1, self.bank.add(Var(String::from("x"))));
         for size in 2..=maxs {
             self.sizes.push(HashSet::new());
-            self.canonicalize_sizes();
             // expand nodes with arity 1
-            for f in [
-                Program::Bvnot,
-                Program::Smol,
-                Program::Ehad,
-                Program::Arba,
-                Program::Shesh,
-            ] {
-                for args in self.gen_args(size - 1, 1) {
+            self.canonicalize_sizes();
+            for args in self.gen_args(size - 1, 1) {
+                for f in [Bvnot, Smol, Ehad, Arba, Shesh] {
                     let newnode = f(args[0]);
                     process!(size, self.bank.add(newnode));
                 }
             }
-            self.canonicalize_sizes();
             // expand nodes with arity 2
+            self.canonicalize_sizes();
             for args in self.gen_args(size - 1, 2) {
-                for f in [
-                    Program::Bvand,
-                    Program::Bvor,
-                    Program::Bvxor,
-                    Program::Bvadd,
-                ] {
+                for f in [Bvand, Bvor, Bvxor, Bvadd] {
                     let newnode = f([args[0], args[1]]);
                     process!(size, self.bank.add(newnode));
                 }
             }
-            self.canonicalize_sizes();
             // expand nodes with arity 3
+            self.canonicalize_sizes();
             for args in self.gen_args(size - 1, 3) {
-                let newnode = Program::Im([args[0], args[1], args[2]]);
+                let newnode = Im([args[0], args[1], args[2]]);
                 process!(size, self.bank.add(newnode));
             }
+            self.bank.rebuild();
         }
         println!("not found within size {}", maxs);
         None
     }
 
-    /// Generates args for `arity` number of children whose sizes sum up to `total`
+    /// Generates args for `arity` number of children whose sizes sum up to `total`. Should call
+    /// `canonicalize_sizes` before calling this.
     fn gen_args(&self, total: usize, arity: usize) -> Vec<Vec<Id>> {
         if total < arity {
             return vec![];
