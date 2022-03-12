@@ -132,19 +132,33 @@ impl EggSynthesizer {
     }
 
     pub fn synthesize(&mut self, maxs: usize) -> Option<Id> {
+        // map from outputs to eclass id
+        let mut classmap: HashMap<Vec<ValueT>, Id> = HashMap::new();
+        macro_rules! process {
+            ($size:expr, $id:expr) => {
+                let nid = $id;
+                if let Some(&cid) = classmap.get(&self.bank[nid].data.0) {
+                    self.bank.union(nid, cid);
+                    self.bank.rebuild();
+                } else {
+                    classmap.insert(self.bank[nid].data.0.clone(), nid);
+                }
+                self.sizes[$size].insert(nid);
+                if self.is_goal(nid) {
+                    return Some(nid);
+                }
+            };
+        }
         // nodes with arity 0
         self.sizes.push(HashSet::new());
         self.sizes.push(HashSet::new());
         for &lit in LITS.iter() {
-            let id = self.bank.add(Program::Lit(lit));
-            self.sizes[1].insert(id);
+            process!(1, self.bank.add(Program::Lit(lit)));
         }
-        let id = self.bank.add(Program::Var(String::from("x")));
-        self.sizes[1].insert(id);
-        // map from outputs to eclass id
-        let mut classmap: HashMap<Vec<ValueT>, Id> = HashMap::new();
-        for size in 2..maxs {
+        process!(1, self.bank.add(Program::Var(String::from("x"))));
+        for size in 2..=maxs {
             self.sizes.push(HashSet::new());
+            self.canonicalize_sizes();
             // expand nodes with arity 1
             for f in [
                 Program::Bvnot,
@@ -155,17 +169,7 @@ impl EggSynthesizer {
             ] {
                 for args in self.gen_args(size - 1, 1) {
                     let newnode = f(args[0]);
-                    let nid = self.bank.add(newnode);
-                    if let Some(&cid) = classmap.get(&self.bank[nid].data.0) {
-                        self.bank.union(nid, cid);
-                        self.bank.rebuild();
-                    } else {
-                        classmap.insert(self.bank[nid].data.0.clone(), nid);
-                    }
-                    self.sizes[size].insert(nid);
-                    if self.is_goal(nid) {
-                        return Some(nid);
-                    }
+                    process!(size, self.bank.add(newnode));
                 }
             }
             self.canonicalize_sizes();
@@ -178,38 +182,17 @@ impl EggSynthesizer {
                     Program::Bvadd,
                 ] {
                     let newnode = f([args[0], args[1]]);
-                    let nid = self.bank.add(newnode);
-                    if let Some(&cid) = classmap.get(&self.bank[nid].data.0) {
-                        self.bank.union(nid, cid);
-                        self.bank.rebuild();
-                    } else {
-                        classmap.insert(self.bank[nid].data.0.clone(), nid);
-                    }
-                    self.sizes[size].insert(nid);
-                    if self.is_goal(nid) {
-                        return Some(nid);
-                    }
+                    process!(size, self.bank.add(newnode));
                 }
             }
             self.canonicalize_sizes();
             // expand nodes with arity 3
             for args in self.gen_args(size - 1, 3) {
                 let newnode = Program::Im([args[0], args[1], args[2]]);
-                let nid = self.bank.add(newnode);
-                if let Some(&cid) = classmap.get(&self.bank[nid].data.0) {
-                    self.bank.union(nid, cid);
-                    self.bank.rebuild();
-                } else {
-                    classmap.insert(self.bank[nid].data.0.clone(), nid);
-                }
-                self.sizes[size].insert(nid);
-                if self.is_goal(nid) {
-                    return Some(nid);
-                }
+                process!(size, self.bank.add(newnode));
             }
-            self.canonicalize_sizes();
         }
-        println!("not found within iteration {}", maxs);
+        println!("not found within size {}", maxs);
         None
     }
 
