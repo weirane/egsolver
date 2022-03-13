@@ -225,7 +225,7 @@ impl BottomUpSynthesizer {
         let mut ret = vec![];
         if arity == 1 {
             for u in &self.bank[total as usize] {
-                if !self.enable_ft || !self.filter(op, u) {
+                if !self.enable_ft || !self.filter(op, u.operator) {
                     ret.push(vec![u.clone()]);
                 }
             }
@@ -245,9 +245,9 @@ impl BottomUpSynthesizer {
 
     /// returns tree iff can be filtered out
     /// for example (+ 0) can be filtered out
-    fn filter(&self, op: OP, first_arg: &Rc<GNode>) -> bool {
+    fn filter(&self, op: OP, first_arg: OP) -> bool {
         use OP::*;
-        match (op, first_arg.operator) {
+        match (op, first_arg) {
             (smol, ehad) => true,
             (ehad, smol) => true,
             (bvnot, _lit(0)) => true,

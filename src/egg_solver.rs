@@ -258,12 +258,17 @@ impl EggSynthesizer {
                 return true;
             }
         }
-        // if not, delete this enode when it is not the only one in the eclass
+        // if not, delete enode with the same set op, when it is not the only op in the eclass
         let equivalents = &self.bank[id].nodes;
-        if equivalents.len() > 1 {
+        let to_delete = equivalents
+            .iter()
+            .filter(|u| u.matches(&enode))
+            .collect::<Vec<_>>();
+        if equivalents.len() > to_delete.len() {
             unsafe {
-                // println!("\t\nremoved {:?} from {:?}\n", enode, equivalents);
-                removed.as_mut().unwrap().insert(enode.clone());
+                for u in to_delete {
+                    removed.as_mut().unwrap().insert(u.clone());
+                }
             }
             true
         } else {
