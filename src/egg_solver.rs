@@ -218,7 +218,7 @@ impl EggSynthesizer {
         let mut removed = HashSet::<Program>::new();
         let mut exhausted = false;
         for i in 1..=howmany {
-            let ext = Extractor::new(&self.bank, MyAstSize { removed: &removed });
+            let ext = Extractor::new(&self.bank, VariedWeight { removed: &removed });
             let (cost, ast) = ext.find_best(id);
             if cost >= INF_COST {
                 exhausted = true;
@@ -245,7 +245,7 @@ impl EggSynthesizer {
         &self,
         id: Id,
         removed: *mut HashSet<Program>,
-        ext: &Extractor<MyAstSize, Program, ObservEquiv>,
+        ext: &Extractor<VariedWeight, Program, ObservEquiv>,
     ) -> bool {
         let eclass_minsize = self.bank[id].data.1;
         if eclass_minsize <= 2 {
@@ -290,5 +290,51 @@ impl CostFunction<Program> for MyAstSize {
         } else {
             enode.fold(1, |sum, id| sum + costs(id))
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct VariedWeight {
+    removed: *const HashSet<Program>,
+}
+
+impl CostFunction<Program> for VariedWeight {
+    type Cost = usize;
+    fn cost<C>(&mut self, enode: &Program, mut costs: C) -> Self::Cost
+    where
+        C: FnMut(Id) -> Self::Cost,
+    {
+        if unsafe { self.removed.as_ref().unwrap().contains(enode) } {
+            INF_COST
+        } else {
+            let opcost = match enode {
+                Program::Bvand(_) | Program::Bvor(_) | Program::Bvxor(_) => 2,
+                Program::Bvadd(_) => 10,
+                Program::Im(_) => 100,
+                _ => 1,
+            };
+            enode.fold(opcost, |acc, arg| acc + costs(arg))
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct EGraphCostFn<'a> {
+    egraph: &'a EGraph,
+}
+
+impl CostFunction<Program> for EGraphCostFn<'_> {
+    type Cost = usize;
+    fn cost<C>(&mut self, enode: &Program, mut costs: C) -> Self::Cost
+    where
+        C: FnMut(Id) -> Self::Cost,
+    {
+        let opcost = match enode {
+            Program::Bvand(_) | Program::Bvor(_) | Program::Bvxor(_) => 2,
+            Program::Bvadd(_) => 10,
+            Program::Im(_) => 100,
+            _ => 1,
+        };
+        enode.fold(opcost, |acc, arg| acc + costs(arg))
     }
 }
