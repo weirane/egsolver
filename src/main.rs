@@ -2,6 +2,8 @@ mod bottomup_solver;
 mod egg_solver;
 mod parse;
 
+mod PBE_string_solver_bottomup;
+
 use std::env;
 use std::time::Instant;
 
@@ -9,21 +11,26 @@ use anyhow::Result;
 
 use crate::bottomup_solver::BottomUpSynthesizer;
 use crate::egg_solver::EggSynthesizer;
-use crate::parse::io_example_from_file;
+use crate::parse::{io_example_from_file,string_io_example_from_file };
 
 fn main() -> Result<()> {
     let args: Vec<String> = env::args().collect();
-    if args.len() - 1 < 3 {
+    if args.len() - 1 < 4 {
         println!();
-        println!("usage: egsolver sygus_filename maxsize number_off_egg_answers");
+        println!("usage: egsolver bv/string sygus_filename maxsize number_off_egg_answers");
         println!();
         std::process::exit(1);
     }
-    let filename = &args[1];
-    let maxsize = args[2].parse::<usize>()?;
-    let equivalents = args[3].parse::<i32>()?;
-    println!("reading from sygus file {}", filename);
+    
+    let syn_option = &args[1];
+    let filename = &args[2];
+    let maxsize = args[3].parse::<usize>()?;
+    let equivalents = args[4].parse::<i32>()?;
+    
+    if *syn_option == "bv" {
+      println!("reading from sygus file {}", filename);
     println!("maxsize = {}", maxsize);
+
     let exp = io_example_from_file(filename)?;
 
     // let lowest_erased = |x: u64| x.wrapping_add(NEG1) & x;
@@ -62,5 +69,43 @@ fn main() -> Result<()> {
     if let Some(id) = res {
         egsolver.print_equivalents(id, equivalents);
     }
-    Ok(())
+  }
+  
+  if syn_option == "string" {
+    println!("reading from sygus file {}", filename);
+    println!("maxsize = {}", maxsize);
+    let exp = string_io_example_from_file(filename)?;
+    dbg!(&exp);
+
+    // let lowest_erased = |x: u64| x.wrapping_add(NEG1) & x;
+    // let f = lowest_erased;
+    // let io_spec = vec![1, 2, 3, 18, 256]
+    //     .into_iter()
+    //     .map(|x: u64| (x, f(x)))
+    //     .collect::<IOMapT>();
+
+    let io_spec = exp;
+
+
+    println!("Given io spec\n{:?}", io_spec);
+    println!("\n---Running baseline");
+    for enable_oe in [true] {
+        for enable_ft in [false, true] {
+            let now = Instant::now();
+            let mut synthesizer = PBE_string_solver_bottomup::BottomUpSynthesizer::new(io_spec.0.clone(), enable_oe, enable_ft, io_spec.1.clone(), io_spec.2.clone());
+            println!("-----");
+            if let Some(u) = synthesizer.synthesize(maxsize) {
+                println!("{}", u);
+            }
+            println!(
+                "enable_oe = {}, enable_ft = {}, time = {}ms",
+                enable_oe,
+                enable_ft,
+                now.elapsed().as_millis()
+            );
+        }
+    }
+  }
+  Ok(())
+  
 }
