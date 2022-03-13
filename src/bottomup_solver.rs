@@ -214,9 +214,9 @@ impl BottomUpSynthesizer {
         None
     }
 
-    // generate a list of argument lists, 
-    // given total size, and the number of args
-    //       context operator (for filtering)
+    /// generate a list of argument lists, 
+    /// given total size, and the number of args
+    ///       context operator (for filtering)
     fn gen_args(&mut self, total: i32, arity: i32, op: OP) -> Vec<Vec<Rc<GNode>>> {
         if total < arity {
             return vec![];
@@ -243,8 +243,8 @@ impl BottomUpSynthesizer {
         ret
     }
 
-    // returns tree iff can be filtered out
-    // for example (+ 0) can be filtered out
+    /// returns tree iff can be filtered out
+    /// for example (+ 0) can be filtered out
     fn filter(&self, op: OP, first_arg: &Rc<GNode>) -> bool {
         use OP::*;
         match (op, first_arg.operator) {

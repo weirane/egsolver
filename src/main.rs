@@ -13,15 +13,18 @@ use crate::parse::io_example_from_file;
 
 fn main() -> Result<()> {
     let args: Vec<String> = env::args().collect();
-    if args.len() - 1 < 2 {
-        panic!("usage: egsolver sygus_filename maxsize");
+    if args.len() - 1 < 3 {
+        println!();
+        println!("usage: egsolver sygus_filename maxsize number_off_egg_answers");
+        println!();
+        std::process::exit(1);
     }
     let filename = &args[1];
     let maxsize = args[2].parse::<usize>()?;
+    let equivalents = args[3].parse::<i32>()?;
     println!("reading from sygus file {}", filename);
     println!("maxsize = {}", maxsize);
     let exp = io_example_from_file(filename)?;
-    dbg!(&exp);
 
     // let lowest_erased = |x: u64| x.wrapping_add(NEG1) & x;
     // let f = lowest_erased;
@@ -31,11 +34,11 @@ fn main() -> Result<()> {
     //     .collect::<IOMapT>();
 
     let io_spec = exp;
+    dbg!(&io_spec);
 
-    println!("Given io spec\n{:?}", io_spec);
     println!("\n---Running baseline");
     for enable_oe in [true] {
-        for enable_ft in [false, true] {
+        for enable_ft in [true] {
             let now = Instant::now();
             let mut synthesizer = BottomUpSynthesizer::new(io_spec.clone(), enable_oe, enable_ft);
             println!("-----");
@@ -57,7 +60,7 @@ fn main() -> Result<()> {
     let res = egsolver.synthesize(maxsize);
     println!("egg. time = {}ms", now.elapsed().as_millis());
     if let Some(id) = res {
-        egsolver.print_equivalents(id, 20);
+        egsolver.print_equivalents(id, equivalents);
     }
     Ok(())
 }

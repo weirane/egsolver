@@ -119,7 +119,7 @@ impl Analysis<Program> for ObservEquiv {
 
 pub struct EggSynthesizer {
     pub bank: EGraph,
-    sizes: Vec<HashSet<Id>>,
+    sizes: Vec<HashSet<Id>>, // sizes[s] = set of eclasses whose minsize = s
     outputs: Vec<ValueT>,
 }
 
@@ -146,11 +146,13 @@ impl EggSynthesizer {
                 let prog = $prog;
                 let nid = self.bank.add(prog);
                 if let Some(&cid) = classmap.get(&self.bank[nid].data.0) {
-                    self.bank.union(nid, cid);
+                    self.bank.union(cid, nid);
+                    // println!("nidsize {} cidsize {}", self.bank[nid].data.1, self.bank[cid].data.1);
+                    // nid.size must >= cid.size, no need to insert nid to sizes
                 } else {
                     classmap.insert(self.bank[nid].data.0.clone(), nid);
+                    self.sizes[$size].insert(nid);
                 }
-                self.sizes[$size].insert(nid);
                 if self.is_goal(nid) {
                     self.bank.rebuild();
                     return Some(self.bank.find(nid));
@@ -167,7 +169,6 @@ impl EggSynthesizer {
         for size in 2..=maxs {
             self.sizes.push(HashSet::new());
             // expand nodes with arity 1
-            self.canonicalize_sizes();
             for args in self.gen_args(size - 1, 1) {
                 for f in [Bvnot, Smol, Ehad, Arba, Shesh] {
                     let newnode = f(args[0]);
@@ -175,7 +176,6 @@ impl EggSynthesizer {
                 }
             }
             // expand nodes with arity 2
-            self.canonicalize_sizes();
             for args in self.gen_args(size - 1, 2) {
                 for f in [Bvand, Bvor, Bvxor, Bvadd] {
                     let newnode = f([args[0], args[1]]);
@@ -183,7 +183,6 @@ impl EggSynthesizer {
                 }
             }
             // expand nodes with arity 3
-            self.canonicalize_sizes();
             for args in self.gen_args(size - 1, 3) {
                 let newnode = Im([args[0], args[1], args[2]]);
                 process!(size, newnode);
@@ -194,8 +193,7 @@ impl EggSynthesizer {
         None
     }
 
-    /// Generates args for `arity` number of children whose sizes sum up to `total`. Should call
-    /// `canonicalize_sizes` before calling this.
+    /// Generates args for `arity` number of children whose sizes sum up to `total`.
     fn gen_args(&self, total: usize, arity: usize) -> Vec<Vec<Id>> {
         if total < arity {
             return vec![];
@@ -216,46 +214,81 @@ impl EggSynthesizer {
         res
     }
 
-    fn canonicalize_sizes(&mut self) {
-        for (size, ids) in self.sizes.iter_mut().enumerate() {
-            *ids = ids
-                .iter()
-                .map(|&id| self.bank.find(id))
-                .filter(|&id| self.bank[id].data.1 == size)
-                .collect();
-        }
-    }
-
     pub fn print_equivalents(&mut self, id: Id, howmany: i32) {
+        let mut removed = HashSet::<Program>::new();
+        let mut exhausted = false;
         for i in 1..=howmany {
-            let ext = Extractor::new(&self.bank, AstSize);
+            let ext = Extractor::new(&self.bank, MyAstSize { removed: &removed });
             let (cost, ast) = ext.find_best(id);
-            println!("[#{} cost={}] {}", i, cost, ast.pretty(80).replace("18446744073709551615", "-1"));
-
-            if self.delete_best(id) == false {
-                println!("cannot find another variant");
-                break
+            if cost >= INF_COST {
+                exhausted = true;
+                break;
+            }
+            println!(
+                "[#{} cost={}] {}",
+                i,
+                cost,
+                ast.pretty(80).replace("18446744073709551615", "-1")
+            );
+            if i < howmany && self.delete_best(id, &mut removed, &ext) == false {
+                exhausted = true;
+                break;
             }
         }
+        if exhausted {
+            println!("cannot find another non-trivial variant.");
+        }
     }
 
-    fn delete_best(&mut self, id: Id) -> bool {
-        let ext = Extractor::new(&self.bank, AstSize);
-        let enode = ext.find_best_node(id).clone();
+    /// mark a tombstone on the best program
+    fn delete_best(
+        &self,
+        id: Id,
+        removed: *mut HashSet<Program>,
+        ext: &Extractor<MyAstSize, Program, ObservEquiv>,
+    ) -> bool {
+        let eclass_minsize = self.bank[id].data.1;
+        if eclass_minsize <= 2 {
+            return false;
+        }
+        let enode = ext.find_best_node(id);
         // try to delete stuff in children first
         for child in enode.children() {
-            if self.delete_best(*child) {
-                return true
+            if self.delete_best(*child, removed, ext) {
+                return true;
             }
         }
         // if not, delete this enode when it is not the only one in the eclass
-        let equivalents = &mut self.bank[id].nodes;
+        let equivalents = &self.bank[id].nodes;
         if equivalents.len() > 1 {
-            equivalents.retain(|u| u != &enode);
-            self.bank.rebuild();
+            unsafe {
+                // println!("\t\nremoved {:?} from {:?}\n", enode, equivalents);
+                removed.as_mut().unwrap().insert(enode.clone());
+            }
             true
         } else {
             false
+        }
+    }
+}
+
+static INF_COST: usize = 100000000;
+#[derive(Debug)]
+pub struct MyAstSize {
+    removed: *const HashSet<Program>,
+}
+// impl<L: Language> CostFunction<L> for MyAstSize {
+impl CostFunction<Program> for MyAstSize {
+    type Cost = usize;
+    // fn cost<C>(&mut self, enode: &L, mut costs: C) -> Self::Cost
+    fn cost<C>(&mut self, enode: &Program, mut costs: C) -> Self::Cost
+    where
+        C: FnMut(Id) -> Self::Cost,
+    {
+        if unsafe { self.removed.as_ref().unwrap().contains(enode) } {
+            INF_COST
+        } else {
+            enode.fold(1, |sum, id| sum + costs(id))
         }
     }
 }
