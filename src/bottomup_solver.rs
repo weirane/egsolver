@@ -248,8 +248,8 @@ impl BottomUpSynthesizer {
     fn filter(&self, op: OP, first_arg: OP) -> bool {
         use OP::*;
         match (op, first_arg) {
-            (smol, ehad) => true,
-            (ehad, smol) => true,
+            // (smol, ehad) => true,
+            // (ehad, smol) => true,
             (bvnot, _lit(0)) => true,
             (bvnot, _lit(NEG1)) => true,
             (bvnot, bvnot) => true,

@@ -7,6 +7,7 @@ use crate::bottomup_solver::{IOMapT, ValueT, LITS};
 pub type EGraph = egg::EGraph<Program, ObservEquiv>;
 
 define_language! {
+    /// syntax
     pub enum Program {
         Lit(ValueT),
         Var(String),
@@ -23,6 +24,7 @@ define_language! {
     }
 }
 
+/// semantics
 impl Program {
     pub fn semantics(&self) -> impl Fn(&[ValueT], &ValueT) -> ValueT + '_ {
         use Program::*;
@@ -49,6 +51,7 @@ impl Program {
     }
 }
 
+/// Make egg do OE using Output Vector
 #[derive(Default)]
 pub struct ObservEquiv {
     inputs: Vec<ValueT>,
@@ -117,6 +120,7 @@ impl Analysis<Program> for ObservEquiv {
     }
 }
 
+/// buttom up, by size
 pub struct EggSynthesizer {
     pub bank: EGraph,
     sizes: Vec<HashSet<Id>>, // sizes[s] = set of eclasses whose minsize = s
@@ -147,7 +151,6 @@ impl EggSynthesizer {
                 let nid = self.bank.add(prog);
                 if let Some(&cid) = classmap.get(&self.bank[nid].data.0) {
                     self.bank.union(cid, nid);
-                    // println!("nidsize {} cidsize {}", self.bank[nid].data.1, self.bank[cid].data.1);
                     // nid.size must >= cid.size, no need to insert nid to sizes
                 } else {
                     classmap.insert(self.bank[nid].data.0.clone(), nid);
@@ -159,15 +162,20 @@ impl EggSynthesizer {
                 }
             };
         }
+        // nodes with size 0
         self.sizes.push(HashSet::new());
-        // nodes with arity 0
+
+        // nodes with size 1
         self.sizes.push(HashSet::new());
         for &lit in LITS.iter() {
             process!(1, Lit(lit));
         }
+
+        // nodes with size >= 2
         process!(1, Var(String::from("x")));
         for size in 2..=maxs {
             self.sizes.push(HashSet::new());
+
             // expand nodes with arity 1
             for args in self.gen_args(size - 1, 1) {
                 for f in [Bvnot, Smol, Ehad, Arba, Shesh] {
@@ -175,6 +183,7 @@ impl EggSynthesizer {
                     process!(size, newnode);
                 }
             }
+
             // expand nodes with arity 2
             for args in self.gen_args(size - 1, 2) {
                 for f in [Bvand, Bvor, Bvxor, Bvadd] {
@@ -182,11 +191,13 @@ impl EggSynthesizer {
                     process!(size, newnode);
                 }
             }
+
             // expand nodes with arity 3
             for args in self.gen_args(size - 1, 3) {
                 let newnode = Im([args[0], args[1], args[2]]);
                 process!(size, newnode);
             }
+
             self.bank.rebuild();
         }
         println!("not found within size {}", maxs);
@@ -214,22 +225,27 @@ impl EggSynthesizer {
         res
     }
 
-    pub fn print_equivalents(&mut self, id: Id, howmany: i32) {
+    /// takes a generic cost function, a top-level e-class, and howmany programs to extract
+    pub fn print_equivalents<C: CF + egg::CostFunction<Program>>(&mut self, id: Id, howmany: i32)
+    where
+        <C as egg::CostFunction<Program>>::Cost: PartialOrd<usize>,
+    {
         let mut removed = HashSet::<Program>::new();
         let mut exhausted = false;
         for i in 1..=howmany {
-            let ext = Extractor::new(&self.bank, VariedWeight { removed: &removed });
+            let ext = Extractor::new(&self.bank, C::new(&removed));
             let (cost, ast) = ext.find_best(id);
             if cost >= INF_COST {
                 exhausted = true;
                 break;
             }
             println!(
-                "[#{} cost={}] {}",
+                "[#{} cost={:?}] {}",
                 i,
                 cost,
                 ast.pretty(80).replace("18446744073709551615", "-1")
             );
+
             if i < howmany && self.delete_best(id, &mut removed, &ext) == false {
                 exhausted = true;
                 break;
@@ -241,24 +257,26 @@ impl EggSynthesizer {
     }
 
     /// mark a tombstone on the best program
-    fn delete_best(
+    fn delete_best<C: CF + egg::CostFunction<Program>>(
         &self,
         id: Id,
         removed: *mut HashSet<Program>,
-        ext: &Extractor<VariedWeight, Program, ObservEquiv>,
+        ext: &Extractor<C, Program, ObservEquiv>,
     ) -> bool {
         let eclass_minsize = self.bank[id].data.1;
         if eclass_minsize <= 2 {
             return false;
         }
         let enode = ext.find_best_node(id);
+
         // try to delete stuff in children first
         for child in enode.children() {
             if self.delete_best(*child, removed, ext) {
                 return true;
             }
         }
-        // if not, delete enode with the same set op, when it is not the only op in the eclass
+
+        // if not, delete enodes with the same op, when this op is not the only op in the eclass
         let equivalents = &self.bank[id].nodes;
         let to_delete = equivalents
             .iter()
@@ -277,15 +295,20 @@ impl EggSynthesizer {
     }
 }
 
+/// our cost function trait requires "tombstone" implemented using hashtable
+pub trait CF {
+    fn new(removed: *const HashSet<Program>) -> Self;
+}
+
 static INF_COST: usize = 100000000;
+
+/// ast size (each production has size 1)
 #[derive(Debug)]
 pub struct MyAstSize {
     removed: *const HashSet<Program>,
 }
-// impl<L: Language> CostFunction<L> for MyAstSize {
 impl CostFunction<Program> for MyAstSize {
     type Cost = usize;
-    // fn cost<C>(&mut self, enode: &L, mut costs: C) -> Self::Cost
     fn cost<C>(&mut self, enode: &Program, mut costs: C) -> Self::Cost
     where
         C: FnMut(Id) -> Self::Cost,
@@ -297,12 +320,17 @@ impl CostFunction<Program> for MyAstSize {
         }
     }
 }
+impl CF for MyAstSize {
+    fn new(removed: *const HashSet<Program>) -> Self {
+        Self { removed }
+    }
+}
 
+/// ast size (each production has some specified size)
 #[derive(Debug, Clone)]
 pub struct VariedWeight {
     removed: *const HashSet<Program>,
 }
-
 impl CostFunction<Program> for VariedWeight {
     type Cost = usize;
     fn cost<C>(&mut self, enode: &Program, mut costs: C) -> Self::Cost
@@ -322,24 +350,8 @@ impl CostFunction<Program> for VariedWeight {
         }
     }
 }
-
-#[derive(Debug, Clone)]
-pub struct EGraphCostFn<'a> {
-    egraph: &'a EGraph,
-}
-
-impl CostFunction<Program> for EGraphCostFn<'_> {
-    type Cost = usize;
-    fn cost<C>(&mut self, enode: &Program, mut costs: C) -> Self::Cost
-    where
-        C: FnMut(Id) -> Self::Cost,
-    {
-        let opcost = match enode {
-            Program::Bvand(_) | Program::Bvor(_) | Program::Bvxor(_) => 2,
-            Program::Bvadd(_) => 10,
-            Program::Im(_) => 100,
-            _ => 1,
-        };
-        enode.fold(opcost, |acc, arg| acc + costs(arg))
+impl CF for VariedWeight {
+    fn new(removed: *const HashSet<Program>) -> Self {
+        Self { removed }
     }
 }
