@@ -1,3 +1,6 @@
+#![allow(clippy::comparison_chain)]
+#![allow(clippy::match_like_matches_macro)]
+
 mod bottomup_solver;
 mod egg_solver;
 mod parse;

@@ -246,7 +246,7 @@ impl EggSynthesizer {
                 ast.pretty(80).replace("18446744073709551615", "-1")
             );
 
-            if i < howmany && self.delete_best(id, &mut removed, &ext) == false {
+            if i < howmany && !self.delete_best(id, &mut removed, &ext) {
                 exhausted = true;
                 break;
             }
@@ -260,7 +260,7 @@ impl EggSynthesizer {
     fn delete_best<C: CF + egg::CostFunction<Program>>(
         &self,
         id: Id,
-        removed: *mut HashSet<Program>,
+        removed: &mut HashSet<Program>,
         ext: &Extractor<C, Program, ObservEquiv>,
     ) -> bool {
         let eclass_minsize = self.bank[id].data.1;
@@ -280,13 +280,11 @@ impl EggSynthesizer {
         let equivalents = &self.bank[id].nodes;
         let to_delete = equivalents
             .iter()
-            .filter(|u| u.matches(&enode))
+            .filter(|u| u.matches(enode))
             .collect::<Vec<_>>();
         if equivalents.len() > to_delete.len() {
-            unsafe {
-                for u in to_delete {
-                    removed.as_mut().unwrap().insert(u.clone());
-                }
+            for u in to_delete {
+                removed.insert(u.clone());
             }
             true
         } else {
