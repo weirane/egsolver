@@ -170,9 +170,9 @@ impl EggSynthesizer {
         for &lit in LITS.iter() {
             process!(1, Lit(lit));
         }
+        process!(1, Var(String::from("x")));
 
         // nodes with size >= 2
-        process!(1, Var(String::from("x")));
         for size in 2..=maxs {
             self.sizes.push(HashSet::new());
 
