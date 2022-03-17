@@ -11,4 +11,4 @@ do
   eggExtractTime=$(grep "egg. extract_time time" $sygusid/egg* | cut -d" " -f5 | cut -d"m" -f1 | datamash -R2 mean 1)
   eggRss=$(grep "Maximum resident" $sygusid/egg* | cut -d" " -f6 | datamash -R2 mean 1 | awk '{printf "%.2f", $1/1000}')
   echo $sygusid, $baselineTime, $baselineRss, $eggSearchTime, $eggExtractTime, $eggRss
-done | tee ../plots/raw.csv
+done | sort -n | tee ../plots/raw.csv

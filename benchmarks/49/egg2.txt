@@ -1,0 +1,40 @@
+    Finished release [optimized] target(s) in 0.01s
+     Running `/var/cache/cargo-target/release/egsolver ../2018-tracks/PBE_BV_Track/PRE_49_10.sl egg 10 1 0`
+
+reading from sygus file ../2018-tracks/PBE_BV_Track/PRE_49_10.sl
+algo = egg
+maxsize = 10
+e1 = 1
+e2 = 0
+
+io_spec.len = 10
+
+--- Running egg
+egg. search time = 47575ms
+------cost func = ast size ------
+[#1 cost=10] (ite (& 1 x) (>>16 x) (<<1 (| 1 x)))
+------cost func = varied weight ------
+egg. extract_time time = 30410ms
+	Command being timed: "cargo run --release ../2018-tracks/PBE_BV_Track/PRE_49_10.sl egg 10 1 0"
+	User time (seconds): 72.85
+	System time (seconds): 7.71
+	Percent of CPU this job got: 99%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 1:20.77
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 11052128
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 140469
+	Minor (reclaiming a frame) page faults: 4503923
+	Voluntary context switches: 1498
+	Involuntary context switches: 1680
+	Swaps: 0
+	File system inputs: 12168
+	File system outputs: 0
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0
