@@ -16,10 +16,12 @@ use crate::parse::io_example_from_file;
 
 fn main() -> Result<()> {
     let args: Vec<String> = env::args().collect();
-    if args.len() - 1 < 4 {
+    if args.len() - 1 < 5 {
         println!();
-        println!("usage: egsolver <sygus_filename> <algo> <maxsize> <number_of_egg_answers>");
+        println!("usage: egsolver <sygus_filename> <algo> <maxsize> <e1> <e2>");
         println!("algo:  both, egg, baseline");
+        println!("e1:    number of egg answers for cost function: MyAstSize");
+        println!("e2:    number of egg answers for cost function: VariedWeight");
         println!();
         std::process::exit(1);
     }
@@ -27,12 +29,14 @@ fn main() -> Result<()> {
     let filename = &args[1];
     let algo = &args[2];
     let maxsize = args[3].parse::<usize>()?;
-    let equivalents = args[4].parse::<i32>()?;
+    let e1 = args[4].parse::<i32>()?;
+    let e2 = args[5].parse::<i32>()?;
     println!();
     println!("reading from sygus file {}", filename);
     println!("algo = {}", &algo);
     println!("maxsize = {}", maxsize);
-    println!("equivalents = {}", equivalents);
+    println!("e1 = {}", e1);
+    println!("e2 = {}", e2);
     println!();
     let exp = io_example_from_file(filename)?;
     if exp.len() > 60 {
@@ -74,9 +78,9 @@ fn main() -> Result<()> {
         if let Some(id) = res {
             let extract_time = Instant::now();
             println!("------cost func = ast size ------");
-            egsolver.print_equivalents::<MyAstSize>(id, equivalents);
+            egsolver.print_equivalents::<MyAstSize>(id, e1);
             println!("------cost func = varied weight ------");
-            egsolver.print_equivalents::<VariedWeight>(id, equivalents);
+            egsolver.print_equivalents::<VariedWeight>(id, e2);
             println!("egg. extract_time time = {}ms", extract_time.elapsed().as_millis());
         }
     }
